@@ -1,0 +1,372 @@
+{% extends "base.html" %}
+{% block title %}План-график предбиллинга — Портал ЕЦП{% endblock %}
+{% block page_title %}План-график предбиллинга{% endblock %}
+{% block head %}
+<style>
+  .ps-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .ps-table th {
+    background: #f1f5f9; color: #334155; font-weight: 700;
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em;
+    padding: 10px 8px; text-align: left; border-bottom: 2px solid #cbd5e1;
+    position: sticky; top: 0; z-index: 1;
+  }
+  .ps-table td { padding: 6px 8px; border-bottom: 1px solid #e2e8f0; vertical-align: middle; }
+  .ps-table tr:hover { background: #f8fafc; }
+  .ps-table input {
+    width: 100%; padding: 5px 6px; font-size: 12px;
+    border: 1px solid #e2e8f0; border-radius: 5px; background: #fff;
+    color: #1e293b;
+  }
+  .ps-table input:focus {
+    border-color: #6366f1; box-shadow: 0 0 0 2px #eef2ff; outline: none;
+  }
+  .ps-table .col-plan, .ps-table .col-fact { width: 170px; }
+  .ps-table .col-to { width: 90px; }
+  .ps-status {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 9px; border-radius: 8px; font-size: 11px; font-weight: 700;
+    border: 1px solid transparent; white-space: nowrap;
+  }
+  .ps-status-done { background: #ecfdf5; color: #059669; border-color: #a7f3d0; }
+  .ps-status-warn { background: #fffbeb; color: #d97706; border-color: #fde68a; }
+  .ps-status-danger { background: #fef2f2; color: #dc2626; border-color: #fecaca; }
+  .ps-status-idle { background: #f1f5f9; color: #64748b; border-color: #e2e8f0; }
+  .ps-header-fields {
+    display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+    margin-bottom: 14px; padding: 12px 16px; background: #fff;
+    border: 1px solid #e2e8f0; border-radius: 12px;
+  }
+  .ps-header-fields label {
+    font-size: 12px; font-weight: 600; color: #475569;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .ps-header-fields input, .ps-header-fields select {
+    padding: 6px 10px; font-size: 13px; border: 1px solid #e2e8f0;
+    border-radius: 6px;
+  }
+  .ps-loading {
+    text-align: center; padding: 40px 20px; color: #94a3b8;
+  }
+  /* ============================================================
+     ТЁМНАЯ ТЕМА ДЛЯ ПЛАН-ГРАФИКА
+     ============================================================ */
+  .dark .ps-table { color: #e2e8f0 !important; }
+  .dark .ps-table th {
+    background: #334155 !important;
+    color: #e2e8f0 !important;
+    border-color: #475569 !important;
+  }
+  .dark .ps-table td {
+    border-color: #334155 !important;
+    color: #e2e8f0 !important;
+  }
+  .dark .ps-table tr:hover { background: #334155 !important; }
+  .dark .ps-table input {
+    background: #0f172a !important;
+    color: #e2e8f0 !important;
+    border-color: #475569 !important;
+  }
+  .dark .ps-table input:disabled {
+    background: #1e293b !important;
+    color: #64748b !important;
+  }
+
+  .dark .ps-header-fields {
+    background: #1e293b !important;
+    border-color: #334155 !important;
+  }
+  .dark .ps-header-fields label { color: #cbd5e1 !important; }
+  .dark .ps-header-fields input,
+  .dark .ps-header-fields select {
+    background: #0f172a !important;
+    color: #e2e8f0 !important;
+    border-color: #475569 !important;
+  }
+
+  .dark .ps-status.ps-status-idle {
+    background: #334155 !important;
+    color: #cbd5e1 !important;
+    border-color: #475569 !important;
+  }
+
+  .dark #psCurrentFilial { color: #818cf8 !important; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div>
+  <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+    <div>
+      <h1 class="text-xl font-bold text-slate-900 dark:text-white">План-график закрытия предбиллинга</h1>
+      <p class="text-sm text-slate-500" id="psMonthLabel">—</p>
+    </div>
+    <div class="flex items-center gap-2 flex-wrap">
+      <button onclick="psSave()" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl">
+        <i class="fa-solid fa-floppy-disk mr-1"></i> Сохранить
+      </button>
+<button onclick="psExportXlsx()" class="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl">
+  <i class="fa-solid fa-file-excel mr-1"></i> Excel
+</button>
+    </div>
+  </div>
+
+  <div class="ps-header-fields">
+    <label>
+      Период:
+      <input type="month" id="psMonth" onchange="psOnMonthChange()">
+    </label>
+    <label>
+      Филиал:
+      <select id="psFilial" onchange="psOnFilialChange()">
+        <option value="">— загрузка —</option>
+      </select>
+    </label>
+    <label>
+      Период съёма МКД:
+      <input type="text" id="psPeriodMkd" placeholder="25.09.2026 - 24.10.2026" onchange="psUpdatePeriod('mkd', this.value)">
+    </label>
+    <label>
+      Период съёма Прочие:
+      <input type="text" id="psPeriodOther" placeholder="29.09.2026 - 28.10.2026" onchange="psUpdatePeriod('other', this.value)">
+    </label>
+    <div id="psCurrentFilial" class="ml-auto text-xs font-semibold text-indigo-600"></div>
+  </div>
+
+  <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="ps-table">
+        <thead>
+          <tr>
+            <th style="width:30px">#</th>
+            <th>Отправитель</th>
+            <th>Получатель</th>
+            <th class="col-to">Кому</th>
+            <th>Наименование</th>
+            <th class="col-plan">План</th>
+            <th class="col-fact">Факт</th>
+            <th style="width:110px">Статус</th>
+          </tr>
+        </thead>
+        <tbody id="psTableBody">
+          <tr><td colspan="8" class="ps-loading"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Загрузка…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+let psData = null;
+let psFilial = 'kirov';
+let psMonth = new Date().toISOString().slice(0,7);
+let psFilialsList = [];
+
+function fmtDt(s) {
+  if (!s) return '';
+  const d = new Date(s);
+  if (isNaN(d)) return s;
+  const pad = n => String(n).padStart(2, '0');
+  return `${pad(d.getDate())}.${pad(d.getMonth()+1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function psStatus(plan, fact) {
+  const now = new Date();
+  if (fact) return { cls: 'ps-status-done', text: '✓ Выполнено' };
+  if (!plan) return { cls: 'ps-status-idle', text: '⚪ Без срока' };
+  const p = new Date(plan);
+  if (isNaN(p)) return { cls: 'ps-status-idle', text: '⚪ Без срока' };
+  return p < now
+    ? { cls: 'ps-status-danger', text: '✕ Просрочено' }
+    : { cls: 'ps-status-warn', text: '⏳ В работе' };
+}
+
+function monthName(monthStr) {
+  const months = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+  const [y, m] = monthStr.split('-');
+  return `${months[parseInt(m)-1]} ${y}`;
+}
+
+function psRender() {
+  if (!psData || !psData[psFilial]) return;
+  const f = psData[psFilial];
+  const periods = f.periods || {};
+
+  document.getElementById('psMonthLabel').textContent = `${monthName(psMonth)} · ${f.name}`;
+  document.getElementById('psPeriodMkd').value = periods.mkd || '';
+  document.getElementById('psPeriodOther').value = periods.other || '';
+  document.getElementById('psCurrentFilial').textContent = 'Текущий филиал: ' + f.name;
+
+  const isMgr = (() => {
+    try { const u = JSON.parse(localStorage.getItem('portal_user') || 'null'); return !!(u && u.role === 'manager'); } catch(e) { return false; }
+  })();
+
+  if (!f.rows || !f.rows.length) {
+    document.getElementById('psTableBody').innerHTML = `<tr><td colspan="8" class="ps-loading">
+      Для этого филиала нет строк плана-графика. Добавьте их в чек-листе или в структуре.
+    </td></tr>`;
+    return;
+  }
+
+  document.getElementById('psTableBody').innerHTML = f.rows.map((r, i) => {
+    const st = psStatus(r.plan, r.fact);
+    const disabled = isMgr ? '' : 'disabled';
+    return `
+      <tr data-id="${r.id}">
+        <td class="text-slate-400">${i + 1}</td>
+        <td class="text-slate-700">${escapeHtml(r.sender || '')}</td>
+        <td class="text-slate-700">${escapeHtml(r.receiver || '')}</td>
+        <td class="text-slate-700">${escapeHtml(r.to || '')}</td>
+        <td class="text-slate-800">${escapeHtml(r.title || '')}</td>
+        <td><input type="datetime-local" value="${r.plan || ''}" ${disabled} onchange="psUpdateField('${r.id}','plan',this.value)"></td>
+        <td><input type="datetime-local" value="${r.fact || ''}" ${disabled} onchange="psUpdateField('${r.id}','fact',this.value)"></td>
+        <td><span class="ps-status ${st.cls}">${st.text}</span></td>
+      </tr>
+    `;
+  }).join('');
+}
+
+async function loadFilials() {
+  try {
+    const res = await fetch('/api/plan-schedule/filials?_=' + Date.now()).then(r => r.json());
+    if (res.ok && res.filials && res.filials.length) {
+      psFilialsList = res.filials;
+      const sel = document.getElementById('psFilial');
+      sel.innerHTML = res.filials.map(f =>
+        `<option value="${f.id}">${escapeHtml(f.name)}</option>`
+      ).join('');
+      if (!res.filials.find(f => f.id === psFilial)) {
+        psFilial = res.filials[0].id;
+      }
+      sel.value = psFilial;
+    } else {
+      document.getElementById('psFilial').innerHTML = '<option value="">Нет филиалов в чек-листе</option>';
+    }
+  } catch (e) {
+    console.error('loadFilials:', e);
+  }
+}
+
+async function psLoad() {
+  psMonth = document.getElementById('psMonth').value || psMonth;
+  psFilial = document.getElementById('psFilial').value || psFilial;
+
+  if (!psFilial) {
+    document.getElementById('psTableBody').innerHTML = `<tr><td colspan="8" class="ps-loading">
+      Выберите филиал.
+    </td></tr>`;
+    return;
+  }
+
+  // Индикатор загрузки
+  document.getElementById('psTableBody').innerHTML = `<tr><td colspan="8" class="ps-loading">
+    <i class="fa-solid fa-spinner fa-spin mr-2"></i>Загрузка…
+  </td></tr>`;
+
+  try {
+    const res = await fetch(`/api/plan-schedule/${psMonth}?_=${Date.now()}`).then(r => r.json());
+    if (res.ok && res.data) {
+      psData = res.data;
+      if (!psData[psFilial]) {
+        const sel = document.getElementById('psFilial');
+        const name = sel.selectedOptions[0] ? sel.selectedOptions[0].textContent : psFilial;
+        psData[psFilial] = { name, periods: { mkd: '', other: '' }, rows: [] };
+      }
+      psRender();
+      const f = psData[psFilial];
+      toast('Загружено: ' + (f.name || psFilial));
+    } else {
+      toast('Ошибка загрузки данных', 'error');
+    }
+  } catch (e) {
+    console.error(e);
+    toast('Ошибка сети', 'error');
+  }
+}
+
+function psOnFilialChange() {
+  psFilial = document.getElementById('psFilial').value;
+  psLoad();
+}
+
+function psOnMonthChange() {
+  psMonth = document.getElementById('psMonth').value;
+  psLoad();
+}
+
+function psUpdateField(rowId, field, value) {
+  if (!psData || !psData[psFilial]) return;
+  const row = (psData[psFilial].rows || []).find(r => r.id === rowId);
+  if (!row) return;
+  row[field] = value;
+  psSave();
+}
+
+function psUpdatePeriod(key, value) {
+  if (!psData || !psData[psFilial]) return;
+  if (!psData[psFilial].periods) psData[psFilial].periods = {};
+  psData[psFilial].periods[key] = value;
+  psSave();
+}
+
+async function psSave() {
+  if (!psData) return;
+  try {
+    const res = await fetch('/api/plan-schedule/' + psMonth, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: psData })
+    }).then(r => r.json());
+    if (res.ok) {
+      toast('Сохранено');
+      psRender();
+    } else {
+      toast('Ошибка сохранения', 'error');
+    }
+  } catch (e) {
+    console.error(e);
+    toast('Ошибка сети', 'error');
+  }
+}
+
+function psExportExcel() {
+  if (!psData || !psData[psFilial]) return;
+  const f = psData[psFilial];
+  const title = `План-график закрытия предбиллинга ${monthName(psMonth)}`;
+  const periods = f.periods || {};
+
+  const rows = [];
+  rows.push([title, '']);
+  rows.push([f.name, '']);
+  rows.push(['Периоды съема показаний:', '']);
+  rows.push(['МКД', periods.mkd || '']);
+  rows.push(['Прочие', periods.other || '']);
+  rows.push([]);
+  rows.push(['Ответственное подразделение', '', '', '', 'Наименование', 'План', 'Факт', 'Статус']);
+  rows.push(['Отправитель', 'Получатель', 'Кому', '', '', '', '', '']);
+  (f.rows || []).forEach((r) => {
+    const st = psStatus(r.plan, r.fact);
+    rows.push([r.sender || '', r.receiver || '', r.to || '', '', r.title || '', fmtDt(r.plan), fmtDt(r.fact), st.text]);
+  });
+
+  const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(';')).join('\n');
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `План-график_${psFilial}_${psMonth}.csv`;
+  a.click();
+  toast('Excel выгружен — можно направлять в СЭДД');
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  document.getElementById('psMonth').value = psMonth;
+  await loadFilials();
+  await psLoad();
+});
+function psExportXlsx() {
+  if (!psFilial) { toast('Выберите филиал', 'error'); return; }
+  const url = `/api/plan-schedule/${psMonth}/xlsx?filial=${encodeURIComponent(psFilial)}`;
+  window.location.href = url;
+  toast('Excel выгружен — можно направлять в СЭДД');
+}
+</script>
+{% endblock %}

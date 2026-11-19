@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}Портал ЕЦП{% endblock %}</title>
+<script src="{{ url_for('static', filename='tailwind.min.js') }}"></script>
+<script>
+  tailwind.config = { darkMode: 'class' };
+  try { if (localStorage.getItem('ecp.theme') === 'dark') document.documentElement.classList.add('dark'); } catch(e){}
+</script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+{% block head %}{% endblock %}
+<style>
+  /* ============================================================
+     ГЛОБАЛЬНАЯ ТЁМНАЯ ТЕМА
+     ============================================================ */
+  .dark .bg-white { background-color: #1e293b !important; }
+  .dark .bg-slate-50 { background-color: #0f172a !important; }
+  .dark .bg-slate-100 { background-color: #334155 !important; }
+  .dark .bg-slate-200 { background-color: #475569 !important; }
+  .dark .bg-slate-800 { background-color: #1e293b !important; }
+  .dark .bg-slate-900 { background-color: #0f172a !important; }
+  .dark .text-slate-900 { color: #f1f5f9 !important; }
+  .dark .text-slate-800 { color: #e2e8f0 !important; }
+  .dark .text-slate-700 { color: #cbd5e1 !important; }
+  .dark .text-slate-600 { color: #94a3b8 !important; }
+  .dark .text-slate-500 { color: #94a3b8 !important; }
+  .dark .text-slate-400 { color: #94a3b8 !important; }
+  .dark .border-slate-200 { border-color: #334155 !important; }
+  .dark .border-slate-100 { border-color: #1e293b !important; }
+  .dark table th { background-color: #334155 !important; color: #e2e8f0 !important; }
+  .dark table td { border-color: #334155 !important; }
+  .dark input, .dark select, .dark textarea {
+    background-color: #1e293b !important;
+    color: #e2e8f0 !important;
+    border-color: #475569 !important;
+  }
+  .dark .ps-table input, .dark .ps-table select {
+    background-color: #1e293b !important;
+    color: #e2e8f0 !important;
+  }
+  .dark .ps-table th { background-color: #334155 !important; color: #e2e8f0 !important; }
+  .dark .task-card { background-color: #1e293b !important; }
+  .dark .phase { background-color: #1e293b !important; }
+  .dark .phase-body { background-color: #0f172a !important; }
+  .dark .filial-card { background-color: #1e293b !important; }
+  .dark .detail-header { background-color: #1e293b !important; }
+  .dark .task-card .task-title { color: #f1f5f9 !important; }
+  .dark .task-card .task-meta { color: #94a3b8 !important; }
+  .dark #timeoff td, .dark #timeoff th { color: #e2e8f0 !important; }
+  .dark .modal-card { background-color: #1e293b !important; color: #e2e8f0 !important; }
+  .dark .modal-card .bg-slate-50 { background-color: #0f172a !important; }
+
+  /* ============================================================
+     ШРИФТ: чуть крупнее и единый
+     ============================================================ */
+  .text-sm { font-size: 0.9rem !important; }
+  .text-xs { font-size: 0.8rem !important; }
+</style>
+</head>
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 min-h-screen flex transition-colors duration-200">
+
+<!-- ================= БОКОВОЕ МЕНЮ ================= -->
+<aside id="sidebar" class="fixed md:static inset-y-0 left-0 z-40 w-64 bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 flex flex-col -translate-x-full md:translate-x-0 transition-transform duration-200">
+  <div class="h-16 flex items-center gap-2 px-4 border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
+    <div class="bg-indigo-600 text-white p-2 rounded-xl shadow-md flex items-center justify-center">
+      <i class="fa-solid fa-cubes text-base"></i>
+    </div>
+    <div>
+      <div class="text-sm font-bold text-slate-900 dark:text-white leading-tight">ЕЦП · Портал</div>
+      <div class="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">рабочие инструменты</div>
+    </div>
+  </div>
+
+  <nav class="flex-1 overflow-y-auto p-3 space-y-1">
+    <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-2 mb-2 mt-1">Рабочее пространство</div>
+
+    <a href="/" data-nav="/" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">
+      <i class="fa-solid fa-calendar-check w-4 text-center text-indigo-500"></i> Чек-лист предбиллинга
+    </a>
+    <a href="/checks" data-nav="/checks" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">
+      <i class="fa-solid fa-clipboard-check w-4 text-center text-emerald-500"></i> Реестр проверок ПУ
+    </a>
+    <a href="/plan-schedule" data-nav="/plan-schedule" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">
+      <i class="fa-solid fa-calendar-days w-4 text-center text-teal-500"></i> План-график
+    </a>
+    <a href="/orders" data-nav="/orders" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">
+      <i class="fa-solid fa-file-invoice w-4 text-center text-rose-500"></i> Приказы
+    </a>
+    <a href="/regulations" data-nav="/regulations" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">
+      <i class="fa-solid fa-file-contract w-4 text-center text-amber-500"></i> Регламенты
+    </a>
+    <a href="/templates" data-nav="/templates" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">
+      <i class="fa-solid fa-file-lines w-4 text-center text-pink-500"></i> Шаблоны
+    </a>
+    <a href="/learning" data-nav="/learning" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">
+      <i class="fa-solid fa-graduation-cap w-4 text-center text-sky-500"></i> Обучение
+    </a>
+    <a href="/timeoff" data-nav="/timeoff" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">
+      <i class="fa-solid fa-business-time w-4 text-center text-violet-500"></i> Отгулы
+    </a>
+  </nav>
+
+  <div class="p-3 border-t border-slate-200 dark:border-slate-700 text-[10px] text-slate-400 dark:text-slate-500 space-y-2">
+    <button type="button" id="themeToggle" class="w-full flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-medium">
+      <i class="fa-solid fa-moon w-4 text-center"></i> Тема
+    </button>
+    <a href="/api/backup/download" class="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-medium">
+      <i class="fa-solid fa-download w-4 text-center text-emerald-500"></i> Бэкап
+    </a>
+  </div>
+</aside>
+
+<div id="sidebarOverlay" class="fixed inset-0 bg-slate-900/50 z-30 hidden md:hidden" onclick="toggleSidebar()"></div>
+
+<!-- ================= ОСНОВНАЯ ЧАСТЬ ================= -->
+<div class="flex-1 flex flex-col min-w-0">
+  <header class="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-20 shadow-sm no-print">
+    <div class="h-16 px-4 sm:px-6 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-3 min-w-0">
+        <button type="button" onclick="toggleSidebar()" class="md:hidden p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700">
+          <i class="fa-solid fa-bars text-slate-600 dark:text-slate-300"></i>
+        </button>
+        <h1 class="text-base font-bold text-slate-900 dark:text-white truncate">
+          {% block page_title %}{% endblock %}
+        </h1>
+      </div>
+      <div class="flex items-center gap-2 flex-shrink-0">
+        <div id="userBadge" class="hidden items-center gap-2 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 rounded-xl">
+          <div id="userAvatar" class="w-7 h-7 rounded-full bg-indigo-600 text-white text-xs font-bold flex items-center justify-center">И</div>
+          <div class="leading-tight hidden sm:block">
+            <div id="userName" class="text-xs font-semibold text-slate-800 dark:text-slate-200">—</div>
+            <div id="userRole" class="text-[10px] text-slate-500 dark:text-slate-400">—</div>
+          </div>
+          <button onclick="logoutUser()" title="Сменить" class="text-slate-400 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 p-1">
+            <i class="fa-solid fa-right-from-bracket text-xs"></i>
+          </button>
+        </div>
+        <button id="loginBtn" onclick="openLogin()" class="inline-flex items-center px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-xl shadow-sm">
+          <i class="fa-solid fa-lock mr-1.5"></i> Войти
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="flex-1 w-full px-4 sm:px-6 py-6">
+    <div class="max-w-7xl mx-auto">
+      {% block content %}{% endblock %}
+    </div>
+  </main>
+
+  <footer class="no-print border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+    <div class="px-4 sm:px-6 py-3 text-center text-[11px] text-slate-400 dark:text-slate-500">
+      <i class="fa-solid fa-shield-halved mr-1 text-emerald-500"></i>
+      Автобэкап сохраняется при каждом запуске сервера в <code class="bg-slate-100 dark:bg-slate-700 px-1 rounded">data.json.backups/</code>
+      · Портал ЕЦП · 2026
+    </div>
+  </footer>
+</div>
+
+<!-- ЛОГИН -->
+<div id="loginModal" class="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm hidden items-center justify-center p-4">
+  <div class="bg-white dark:bg-slate-800 rounded-2xl max-w-md w-full shadow-2xl p-6">
+    <div class="flex items-center gap-3 mb-5">
+      <div class="w-12 h-12 rounded-xl bg-indigo-600 text-white flex items-center justify-center">
+        <i class="fa-solid fa-user-shield text-xl"></i>
+      </div>
+      <div>
+        <h2 class="text-lg font-bold dark:text-white">Вход в портал</h2>
+        <p class="text-xs text-slate-500 dark:text-slate-400">Выберите себя или войдите как руководитель</p>
+      </div>
+    </div>
+    <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase mb-1.5">Кто вы?</label>
+    <select id="loginSelect" onchange="onLoginChange()" class="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+      <option value="">— выберите —</option>
+      <option value="__manager__">👑 Руководитель (полный доступ)</option>
+    </select>
+    <div id="passwordBlock" class="hidden mb-3">
+      <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase mb-1.5">Пароль руководителя</label>
+      <input type="password" id="loginPassword" onkeydown="if(event.key==='Enter')doLogin()" class="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+      <p id="loginError" class="hidden text-xs text-rose-500 mt-1.5"></p>
+    </div>
+    <button onclick="doLogin()" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl">Войти</button>
+    <button onclick="document.getElementById('loginModal').classList.add('hidden');document.getElementById('loginModal').classList.remove('flex')" class="w-full mt-2 py-2 text-xs text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">Отмена</button>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast" class="fixed bottom-5 right-5 z-[200] transform translate-y-20 opacity-0 transition-all bg-slate-900 dark:bg-slate-700 text-white px-4 py-3 rounded-xl shadow-xl flex items-center space-x-3 text-sm">
+  <i id="toastIcon" class="fa-solid fa-circle-check text-emerald-400"></i>
+  <span id="toastMsg">Готово</span>
+</div>
+
+<script>
+  window.toggleSidebar = function() {
+    const sb = document.getElementById('sidebar');
+    const ov = document.getElementById('sidebarOverlay');
+    const open = sb.classList.contains('-translate-x-full');
+    if (open) { sb.classList.remove('-translate-x-full'); ov.classList.remove('hidden'); }
+    else { sb.classList.add('-translate-x-full'); ov.classList.add('hidden'); }
+  };
+</script>
+
+<script src="{{ url_for('static', filename='common.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

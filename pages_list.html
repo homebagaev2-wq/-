@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Все страницы — Портал ЕЦП{% endblock %}
+{% block content %}
+<div class="space-y-6 max-w-6xl mx-auto">
+
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <h1 class="text-xl font-bold text-slate-900">Все страницы портала</h1>
+      <p class="text-sm text-slate-500 mt-1">Разделы и произвольные страницы — всё в одном месте</p>
+    </div>
+    <button onclick="createNewPage()" class="inline-flex items-center px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl shadow-sm">
+      <i class="fa-solid fa-plus mr-2"></i> Новая страница
+    </button>
+  </div>
+
+  <section>
+    <h2 class="text-sm font-bold text-slate-700 uppercase tracking-wider mb-3 flex items-center gap-2">
+      <i class="fa-solid fa-cube text-indigo-500"></i> Разделы портала
+      <span id="sectionsCount" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 normal-case tracking-normal">0</span>
+    </h2>
+    <div id="sectionsGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+  </section>
+
+  <section>
+    <h2 class="text-sm font-bold text-slate-700 uppercase tracking-wider mb-3 flex items-center gap-2">
+      <i class="fa-solid fa-file-lines text-violet-500"></i> Страницы портала
+      <span id="pagesCount" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-50 text-violet-600 normal-case tracking-normal">0</span>
+    </h2>
+    <div id="pagesGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+    <div id="pagesEmpty" class="hidden py-12 text-center text-slate-400 text-sm">
+      <i class="fa-solid fa-file text-3xl mb-2 opacity-30 block"></i>
+      Нет дополнительных страниц. Нажмите «Новая страница», чтобы создать первую.
+    </div>
+  </section>
+
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='pages.js') }}"></script>{% endblock %}

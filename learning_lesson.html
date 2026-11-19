@@ -1,0 +1,390 @@
+{% extends "base.html" %}
+{% block title %}{{ lesson.title }} — {{ block.title }} — Портал ЕЦП{% endblock %}
+{% block page_title %}{{ lesson.title }}{% endblock %}
+{% block head %}
+<script>
+  window.MathJax = {
+    tex: { inlineMath: [['$', '$'], ['\\(', '\\)']], displayMath: [['$$', '$$'], ['\\[', '\\]']] },
+    svg: { fontCache: 'global' }
+  };
+</script>
+<script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+<style>
+  .lesson-content { max-width: 900px; }
+  .lesson-content h2 { font-size: 20px; font-weight: 800; margin: 20px 0 12px; padding-bottom: 6px; border-bottom: 2px solid #e0e7ff; }
+  .lesson-content h3 { font-size: 15px; font-weight: 700; margin: 16px 0 8px; }
+  .lesson-content p { font-size: 14px; line-height: 1.65; margin: 10px 0; color: #334155; }
+  .lesson-content ul, .lesson-content ol { padding-left: 22px; margin: 10px 0; }
+  .lesson-content li { font-size: 14px; line-height: 1.6; margin: 5px 0; }
+  .lesson-content .lesson-callout { display: flex; gap: 12px; padding: 14px 18px; border-radius: 10px; margin: 14px 0; font-size: 13px; line-height: 1.6; }
+  .lesson-content .lesson-callout.info { background: #eff6ff; border-left: 4px solid #3b82f6; color: #1e3a8a; }
+  .lesson-content .lesson-callout.warn { background: #fef3c7; border-left: 4px solid #f59e0b; color: #78350f; }
+  .lesson-content .lesson-callout.danger { background: #fee2e2; border-left: 4px solid #dc2626; color: #7f1d1d; }
+  .lesson-content .lesson-table-wrap { overflow-x: auto; margin: 14px 0; }
+  .lesson-content .lesson-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .lesson-content .lesson-table th { background: #f1f5f9; padding: 8px 12px; text-align: left; border-bottom: 2px solid #cbd5e1; }
+  .lesson-content .lesson-table td { padding: 8px 12px; border-bottom: 1px solid #f1f5f9; }
+  .lesson-content .lesson-formula { background: #f8fafc; border: 1px solid #e2e8f0; border-left: 4px solid #4f46e5; padding: 14px 18px; margin: 14px 0; border-radius: 8px; }
+  .lesson-content .lesson-formula-label { font-size: 11px; font-weight: 800; color: #4f46e5; text-transform: uppercase; margin-bottom: 10px; }
+  .lesson-content .lesson-step { display: flex; gap: 12px; margin: 14px 0; }
+  .lesson-content .lesson-step-num { background: #4f46e5; color: #fff; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; flex-shrink: 0; }
+  .lesson-content .lesson-checklist { list-style: none; padding: 0; }
+  .lesson-content .lesson-checklist li { padding: 8px 0 8px 24px; position: relative; border-bottom: 1px solid #f1f5f9; }
+  .lesson-content .lesson-checklist li::before { content: "☐"; position: absolute; left: 0; top: 7px; color: #4f46e5; font-weight: 700; }
+  .lesson-content .val { display: inline-block; padding: 1px 7px; border-radius: 6px; font-weight: 700; font-size: 12px; background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+
+  /* Полноэкранный редактор */
+  .editor-fullscreen {
+    position: fixed; inset: 0; z-index: 100;
+    background: #f8fafc;
+    display: flex; flex-direction: column;
+    transform: translateY(100%);
+    transition: transform .25s ease;
+  }
+  .editor-fullscreen.open { transform: translateY(0); }
+  .editor-header {
+    background: #fff; border-bottom: 1px solid #e2e8f0;
+    padding: 12px 20px;
+    display: flex; align-items: center; gap: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.04);
+    flex-shrink: 0;
+  }
+  .editor-toolbar {
+    background: #fff; border-bottom: 1px solid #e2e8f0;
+    padding: 8px 20px;
+    display: flex; align-items: center; gap: 4px;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+  }
+  .editor-toolbar button {
+    padding: 6px 10px; font-size: 12px; border-radius: 6px;
+    border: 1px solid transparent; background: transparent;
+    color: #475569; cursor: pointer; font-weight: 600;
+    transition: all .12s;
+  }
+  .editor-toolbar button:hover { background: #f1f5f9; color: #0f172a; }
+  .editor-toolbar button.active { background: #eef2ff; color: #4f46e5; border-color: #e0e7ff; }
+  .editor-toolbar .sep { width: 1px; height: 20px; background: #e2e8f0; margin: 0 6px; }
+  .editor-toolbar select {
+    padding: 6px 8px; font-size: 12px; border: 1px solid #e2e8f0;
+    border-radius: 6px; background: #fff; color: #475569;
+  }
+
+  .editor-body {
+    flex: 1;
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 0; overflow: hidden;
+  }
+  .editor-pane {
+    display: flex; flex-direction: column;
+    overflow: hidden; background: #fff;
+  }
+  .editor-pane + .editor-pane { border-left: 1px solid #e2e8f0; background: #fafbfc; }
+  .editor-pane-title {
+    padding: 8px 16px; font-size: 11px; font-weight: 800;
+    text-transform: uppercase; letter-spacing: .05em;
+    color: #64748b; background: #f8fafc; border-bottom: 1px solid #e2e8f0;
+    flex-shrink: 0;
+  }
+  .editor-textarea {
+    flex: 1; padding: 16px; font-family: ui-monospace, 'Cascadia Code', monospace;
+    font-size: 12.5px; line-height: 1.6; color: #1e293b;
+    border: none; outline: none; resize: none;
+    background: #fff; overflow-y: auto;
+  }
+  .editor-textarea:focus { background: #fff; }
+  .editor-preview {
+    flex: 1; padding: 24px; overflow-y: auto; background: #fff;
+  }
+
+  /* Мобильная версия — одна колонка */
+  @media (max-width: 900px) {
+    .editor-body { grid-template-columns: 1fr; }
+    .editor-pane + .editor-pane { border-left: none; border-top: 1px solid #e2e8f0; }
+    .editor-preview { display: none; }
+    .editor-body.preview-on .editor-preview { display: block; }
+  }
+
+  /* Режим «только HTML» */
+  .editor-body.html-only { grid-template-columns: 1fr; }
+  .editor-body.html-only .editor-preview { display: none; }
+
+  /* Тёмная тема */
+  .dark .editor-fullscreen { background: #0f172a; }
+  .dark .editor-header, .dark .editor-toolbar { background: #1e293b; border-color: #334155; }
+  .dark .editor-toolbar button { color: #94a3b8; }
+  .dark .editor-toolbar button:hover { background: #334155; color: #f1f5f9; }
+  .dark .editor-pane { background: #1e293b; }
+  .dark .editor-pane + .editor-pane { background: #0f172a; border-color: #334155; }
+  .dark .editor-textarea { background: #1e293b; color: #e2e8f0; }
+  .dark .editor-preview { background: #1e293b; color: #e2e8f0; }
+  .dark .editor-pane-title { background: #0f172a; color: #94a3b8; border-color: #334155; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="lesson-content mx-auto">
+  <div class="flex items-center justify-between gap-3 mb-6 flex-wrap">
+    <div>
+      <div class="text-xs text-slate-500 mb-1">
+        <a href="/learning" class="hover:underline">Обучение</a> / {{ block.title }}
+      </div>
+      <h1 class="text-2xl font-bold text-slate-900 dark:text-white">{{ lesson.title }}</h1>
+      <p class="text-sm text-slate-500 mt-1">{{ lesson.num }}</p>
+    </div>
+<button onclick="window.print()" class="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 text-sm font-semibold rounded-xl">
+  <i class="fa-solid fa-file-pdf mr-1"></i> PDF
+</button>
+   <button id="editLessonBtn" onclick="openEditor()" class="hidden px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl shadow-sm">
+      <i class="fa-solid fa-pen mr-2"></i> Редактировать
+    </button>
+  </div>
+
+  <div id="lessonContent" class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-6">
+    {{ lesson.content|safe }}
+  </div>
+</div>
+
+<!-- ПОЛНОЭКРАННЫЙ РЕДАКТОР -->
+<div id="fullEditor" class="editor-fullscreen">
+  <!-- Шапка -->
+  <div class="editor-header">
+    <div class="flex-1 min-w-0">
+      <div class="text-xs text-slate-500 truncate">{{ block.title }}</div>
+      <div class="text-sm font-bold text-slate-900 dark:text-white truncate">{{ lesson.title }}</div>
+    </div>
+    <div class="flex items-center gap-2 flex-shrink-0">
+      <button onclick="togglePreview()" class="px-3 py-1.5 bg-slate-100 dark:bg-slate-700 text-xs font-semibold rounded-lg" id="previewBtn">
+        <i class="fa-solid fa-eye mr-1"></i> Предпросмотр
+      </button>
+      <button onclick="closeEditor()" class="px-4 py-1.5 bg-slate-100 dark:bg-slate-700 text-xs font-semibold rounded-lg">
+        Отмена
+      </button>
+      <button onclick="saveLesson()" class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-sm">
+        <i class="fa-solid fa-check mr-1"></i> Сохранить
+      </button>
+    </div>
+  </div>
+
+  <!-- Панель инструментов -->
+  <div class="editor-toolbar">
+    <button onclick="cmd('bold')" title="Жирный (Ctrl+B)"><i class="fa-solid fa-bold"></i></button>
+    <button onclick="cmd('italic')" title="Курсив (Ctrl+I)"><i class="fa-solid fa-italic"></i></button>
+    <button onclick="cmd('underline')" title="Подчёркнутый (Ctrl+U)"><i class="fa-solid fa-underline"></i></button>
+    <div class="sep"></div>
+    <select onchange="cmd('formatBlock', this.value); this.selectedIndex=0;">
+      <option value="">Абзац</option>
+      <option value="h2">H2</option>
+      <option value="h3">H3</option>
+      <option value="p">Параграф</option>
+      <option value="blockquote">Цитата</option>
+    </select>
+    <div class="sep"></div>
+    <button onclick="cmd('insertUnorderedList')" title="Маркированный список"><i class="fa-solid fa-list-ul"></i></button>
+    <button onclick="cmd('insertOrderedList')" title="Нумерованный список"><i class="fa-solid fa-list-ol"></i></button>
+    <div class="sep"></div>
+    <button onclick="insertCallout('info')" title="Callout: инфо" style="color:#3b82f6"><i class="fa-solid fa-circle-info"></i></button>
+    <button onclick="insertCallout('warn')" title="Callout: предупреждение" style="color:#f59e0b"><i class="fa-solid fa-triangle-exclamation"></i></button>
+    <button onclick="insertCallout('danger')" title="Callout: опасно" style="color:#dc2626"><i class="fa-solid fa-circle-exclamation"></i></button>
+    <div class="sep"></div>
+    <button onclick="insertTable()" title="Таблица"><i class="fa-solid fa-table"></i></button>
+    <button onclick="insertFormula()" title="Формула"><i class="fa-solid fa-square-root-variable"></i></button>
+    <button onclick="insertStep()" title="Шаг"><i class="fa-solid fa-list-check"></i></button>
+    <div class="sep"></div>
+    <button onclick="cmd('createLink', prompt('URL:'))" title="Ссылка"><i class="fa-solid fa-link"></i></button>
+    <button onclick="toggleHtmlMode()" id="htmlModeBtn" title="HTML-код"><i class="fa-solid fa-code"></i></button>
+  </div>
+
+  <!-- Тело: две панели -->
+  <div class="editor-body" id="editorBody">
+    <div class="editor-pane">
+      <div class="editor-pane-title" id="leftPaneTitle">HTML-код</div>
+      <textarea id="editorTextarea" class="editor-textarea" spellcheck="false"></textarea>
+    </div>
+    <div class="editor-pane">
+      <div class="editor-pane-title">Предпросмотр</div>
+      <div id="editorPreview" class="editor-preview lesson-content"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+let editorMode = 'html';  // 'html' | 'visual'
+let editorOriginal = '';
+
+function openEditor() {
+  const content = document.getElementById('lessonContent').innerHTML.trim();
+  editorOriginal = content;
+  document.getElementById('editorTextarea').value = content;
+  document.getElementById('fullEditor').classList.add('open');
+  document.getElementById('editorBody').classList.remove('preview-on');
+  updatePreview();
+  document.body.style.overflow = 'hidden';
+}
+
+function closeEditor() {
+  if (confirm('Закрыть без сохранения? Изменения будут потеряны.')) {
+    document.getElementById('fullEditor').classList.remove('open');
+    document.body.style.overflow = '';
+  }
+}
+
+function togglePreview() {
+  document.getElementById('editorBody').classList.toggle('preview-on');
+}
+
+function toggleHtmlMode() {
+  editorMode = editorMode === 'html' ? 'visual' : 'html';
+  const btn = document.getElementById('htmlModeBtn');
+  const leftTitle = document.getElementById('leftPaneTitle');
+  const textarea = document.getElementById('editorTextarea');
+
+  if (editorMode === 'visual') {
+    btn.classList.add('active');
+    leftTitle.textContent = 'Визуальный редактор';
+    // Конвертируем textarea в contenteditable
+    const wrap = document.createElement('div');
+    wrap.id = 'visualEditor';
+    wrap.contentEditable = 'true';
+    wrap.className = 'editor-textarea';
+    wrap.style.cssText = 'background:#fff;padding:16px;overflow-y:auto;';
+    wrap.innerHTML = textarea.value;
+    textarea.replaceWith(wrap);
+    wrap.addEventListener('input', updatePreview);
+  } else {
+    btn.classList.remove('active');
+    leftTitle.textContent = 'HTML-код';
+    const ve = document.getElementById('visualEditor');
+    if (ve) {
+      const ta = document.createElement('textarea');
+      ta.id = 'editorTextarea';
+      ta.className = 'editor-textarea';
+      ta.spellcheck = false;
+      ta.value = ve.innerHTML;
+      ve.replaceWith(ta);
+      ta.addEventListener('input', updatePreview);
+    }
+  }
+}
+
+function updatePreview() {
+  const ta = document.getElementById('editorTextarea');
+  const ve = document.getElementById('visualEditor');
+  const html = ve ? ve.innerHTML : (ta ? ta.value : '');
+  document.getElementById('editorPreview').innerHTML = html;
+  // Обновляем MathJax
+  if (window.MathJax && MathJax.typesetPromise) {
+    MathJax.typesetPromise([document.getElementById('editorPreview')]).catch(()=>{});
+  }
+}
+
+function cmd(command, value) {
+  document.execCommand(command, false, value || null);
+  updatePreview();
+}
+
+function insertHtml(html) {
+  const ve = document.getElementById('visualEditor');
+  if (ve) {
+    document.execCommand('insertHTML', false, html);
+  } else {
+    const ta = document.getElementById('editorTextarea');
+    const pos = ta.selectionStart;
+    ta.value = ta.value.slice(0, pos) + html + ta.value.slice(pos);
+    ta.selectionStart = ta.selectionEnd = pos + html.length;
+  }
+  updatePreview();
+}
+
+function insertCallout(type) {
+  insertHtml(`<div class="lesson-callout ${type}">
+  <div class="lesson-callout-icon">${type === 'info' ? '💡' : type === 'warn' ? '⚠️' : '🚨'}</div>
+  <div class="lesson-callout-body"><b>${type === 'info' ? 'Важно' : type === 'warn' ? 'Внимание' : 'Осторожно'}:</b> текст</div>
+</div>`);
+}
+
+function insertTable() {
+  insertHtml(`<div class="lesson-table-wrap">
+<table class="lesson-table">
+<thead><tr><th>Заголовок 1</th><th>Заголовок 2</th></tr></thead>
+<tbody>
+<tr><td>Ячейка 1</td><td>Ячейка 2</td></tr>
+<tr><td>Ячейка 3</td><td>Ячейка 4</td></tr>
+</tbody>
+</table>
+</div>`);
+}
+
+function insertFormula() {
+  insertHtml('<div class="lesson-formula"><div class="lesson-formula-label">Формула</div>$$ K_n = \\left\\lceil \\frac{|t_{факт} - t_{граница}|}{3} \\right\\rceil \\times 0{,}001 $$</div>');
+}
+
+function insertStep() {
+  insertHtml(`<div class="lesson-step">
+  <div class="lesson-step-num">1</div>
+  <div class="lesson-step-body"><h3>Название шага</h3><p>Описание шага.</p></div>
+</div>`);
+}
+
+function saveLesson() {
+  const ve = document.getElementById('visualEditor');
+  const ta = document.getElementById('editorTextarea');
+  const html = ve ? ve.innerHTML : (ta ? ta.value : '');
+  fetch('/api/learning/lesson/{{ block.id }}/{{ lesson.id }}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content: html })
+  }).then(r => r.json()).then(res => {
+    if (res.ok) {
+      document.getElementById('lessonContent').innerHTML = html;
+      toast('Сохранено');
+      document.getElementById('fullEditor').classList.remove('open');
+      document.body.style.overflow = '';
+      if (window.MathJax && MathJax.typesetPromise) {
+        MathJax.typesetPromise([document.getElementById('lessonContent')]).catch(()=>{});
+      }
+    } else {
+      toast('Ошибка сохранения', 'error');
+    }
+  }).catch(() => toast('Ошибка сети', 'error'));
+}
+
+// Ctrl+S
+document.addEventListener('keydown', e => {
+  if (e.ctrlKey && e.key === 's' && document.getElementById('fullEditor').classList.contains('open')) {
+    e.preventDefault();
+    saveLesson();
+  }
+  if (e.key === 'Escape' && document.getElementById('fullEditor').classList.contains('open')) {
+    e.preventDefault();
+    closeEditor();
+  }
+});
+
+// Инициализация
+document.addEventListener('DOMContentLoaded', () => {
+  const ta = document.getElementById('editorTextarea');
+  if (ta) ta.addEventListener('input', updatePreview);
+});
+document.addEventListener('DOMContentLoaded', () => {
+  const btn = document.getElementById('editLessonBtn');
+  if (btn) {
+    try {
+      const u = JSON.parse(localStorage.getItem('portal_user') || 'null');
+      if (u && u.role === 'manager') btn.classList.remove('hidden');
+    } catch(e) {}
+  }
+});
+</script>
+{% endblock %}
+
+@media print {
+  header, nav, footer, .no-print, #editLessonBtn, #deleteLessonBtn { display: none !important; }
+  body { background: #fff !important; }
+  .lesson-content { max-width: 100% !important; }
+  .lesson-content h2 { page-break-after: avoid; }
+  .lesson-content .lesson-table-wrap { page-break-inside: avoid; }
+  .lesson-content .lesson-callout { page-break-inside: avoid; }
+  .lesson-content .lesson-formula { page-break-inside: avoid; }
+}

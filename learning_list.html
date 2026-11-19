@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Обучение — Портал ЕЦП{% endblock %}
+{% block content %}
+<div class="max-w-6xl mx-auto">
+  <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+    <div>
+      <h1 class="text-xl font-bold text-slate-900">Обучение</h1>
+      <p class="text-sm text-slate-500 mt-1">Выберите блок, чтобы открыть уроки</p>
+    </div>
+  </div>
+  <div id="blocksGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+  <div id="blocksEmpty" class="hidden py-16 text-center">
+    <div class="w-20 h-20 bg-sky-50 text-sky-500 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">
+      <i class="fa-solid fa-graduation-cap"></i>
+    </div>
+    <h3 class="text-base font-bold text-slate-800">Блоков пока нет</h3>
+    <p class="text-sm text-slate-500 mt-1">Скоро здесь появятся материалы для обучения</p>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='learning.js') }}"></script>{% endblock %}

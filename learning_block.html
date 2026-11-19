@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}{{ block.title }} — Обучение — Портал ЕЦП{% endblock %}
+{% block content %}
+<div class="max-w-5xl mx-auto">
+  <nav class="mb-4 flex items-center gap-2 text-xs text-slate-500">
+    <a href="/learning" class="hover:text-indigo-600">Обучение</a>
+    <i class="fa-solid fa-chevron-right text-[8px]"></i>
+    <span class="text-slate-800 font-medium">{{ block.title }}</span>
+  </nav>
+
+  <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 mb-4">
+    <div class="flex items-start gap-4">
+      <div class="w-14 h-14 rounded-2xl bg-sky-50 text-sky-600 flex items-center justify-center text-2xl flex-shrink-0">
+        <i class="fa-solid {{ block.icon }}"></i>
+      </div>
+      <div class="min-w-0 flex-1">
+        <h1 class="text-xl font-bold text-slate-900 mb-1">{{ block.title }}</h1>
+        <p class="text-sm text-slate-500">{{ block.desc }}</p>
+        <div class="text-xs text-slate-400 mt-2">
+          {{ block.lessons|length }} {% if block.lessons|length == 1 %}материал{% elif block.lessons|length < 5 %}материала{% else %}материалов{% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="space-y-3">
+    {% for lesson in block.lessons %}
+    <a href="/learning/lesson/{{ block.id }}/{{ lesson.id }}" class="group block bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all p-4">
+      <div class="flex items-center gap-4">
+        <div class="w-11 h-11 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
+          {% if 'Памятка' in lesson.num %}
+            <i class="fa-solid fa-clipboard-list"></i>
+          {% elif 'Урок' in lesson.num %}
+            <i class="fa-solid fa-book-open"></i>
+          {% else %}
+            <i class="fa-solid fa-file-lines"></i>
+          {% endif %}
+        </div>
+        <div class="min-w-0 flex-1">
+          <div class="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">{{ lesson.num }}</div>
+          <div class="font-semibold text-slate-900 text-sm truncate">{{ lesson.title }}</div>
+        </div>
+        <i class="fa-solid fa-arrow-right text-slate-300 group-hover:text-indigo-500 group-hover:translate-x-0.5 transition-all"></i>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

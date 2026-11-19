@@ -1,0 +1,321 @@
+{% extends "base.html" %}
+{% block title %}Реестр проверок — Портал ЕЦП{% endblock %}
+{% block page_title %}Реестр проверок ПУ{% endblock %}
+{% block head %}
+<style>
+  .checks-table {
+    --cols: 30px 1.5fr 1.5fr 70px 1fr 40px;
+    --gap: 10px;
+  }
+  .col-header,
+  .rule-grid {
+    display: grid;
+    grid-template-columns: var(--cols);
+    gap: var(--gap);
+    align-items: start;
+    padding: 10px 14px;
+  }
+  .col-header > *,
+  .rule-grid > * { min-width: 0; overflow-wrap: break-word; }
+
+  .col-header {
+    background: linear-gradient(180deg, #f1f5f9 0%, #e2e8f0 100%);
+    border-top: 1px solid #cbd5e1;
+    border-bottom: 1px solid #cbd5e1;
+    font-size: 10.5px;
+    font-weight: 800;
+    color: #334155;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+  .col-header > div:nth-child(4) { text-align: center; }
+
+  .rule-grid {
+    border-bottom: 1px solid #e2e8f0;
+    background: #fff;
+    transition: background .15s, opacity .15s;
+  }
+  .rule-grid:nth-child(even) { background: #fafbfc; }
+  .rule-grid:hover { background: #f1f5f9; }
+  .rule-grid:last-child { border-bottom: none; }
+
+  .rule-grid.dragging,
+  .group.dragging { opacity: 0.4; background: #fef3c7 !important; }
+  .rule-grid.drag-over { border-top: 3px solid #4f46e5 !important; background: #eef2ff !important; }
+  .group.drag-over { border-top: 4px solid #4f46e5 !important; background: #eef2ff !important; }
+
+  .drag-handle,
+  .group-drag-handle {
+    color: #cbd5e1; cursor: grab; font-size: 16px; text-align: center;
+    user-select: none; padding-top: 2px; line-height: 1;
+    display: inline-block; -webkit-user-drag: element;
+  }
+  .drag-handle:active,
+  .group-drag-handle:active { cursor: grabbing; }
+  .drag-handle:hover,
+  .group-drag-handle:hover { color: #6366f1; }
+  .group-drag-handle { font-size: 18px; padding: 0 4px; }
+
+  .rule-cell {
+    font-size: 13px; line-height: 1.55; color: #1e293b;
+    padding: 3px 5px; border-radius: 4px; outline: none; min-height: 22px;
+  }
+  .rule-cell.note { font-size: 12.5px; color: #475569; font-style: normal; }
+  .rule-cell.note.empty { color: #cbd5e1; font-style: italic; }
+  .rule-cell.editable { cursor: text; }
+  .rule-cell.editable:hover { background: #f8fafc; }
+  .rule-cell.editable:focus { background: #eef2ff; box-shadow: 0 0 0 2px #6366f1; }
+  body.viewer .rule-cell.editable { cursor: default; padding: 0; }
+  body.viewer .rule-cell.editable:hover { background: transparent; }
+  body.viewer .editor-only { display: none !important; }
+  body.viewer .drag-handle,
+  body.viewer .group-drag-handle { display: none !important; }
+
+  .val {
+    display: inline-block; padding: 1px 6px; margin: 0 1px;
+    border-radius: 5px; font-weight: 700; font-size: 12px;
+    background: #fef3c7; color: #92400e; border: 1px solid #fde68a;
+    white-space: nowrap;
+  }
+  mark { background: #fde68a; color: #78350f; padding: 1px 2px; border-radius: 3px; }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 1px 7px; border-radius: 10px;
+    font-size: 10px; font-weight: 700; margin-left: 4px;
+    white-space: nowrap; vertical-align: middle;
+  }
+  .badge.only { background: #f3e8ff; color: #6d28d9; border: 1px solid #ddd6fe; }
+
+  .apply-btn {
+    width: 32px; height: 32px; border-radius: 8px;
+    border: 2px solid #cbd5e1; background: #f8fafc; color: #cbd5e1;
+    cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+    font-size: 18px; font-weight: 900; line-height: 1; transition: all .15s;
+  }
+  .apply-btn:hover { transform: scale(1.08); }
+  .apply-btn.on { background: #ecfdf5; border-color: #6ee7b7; color: #059669; }
+  .apply-btn.off { background: #fef2f2; border-color: #fecaca; color: #dc2626; }
+  .apply-btn:disabled { cursor: default; transform: none; }
+
+  .check-text { display: none; }
+  .check-text.yes { color: #059669; }
+  .check-text.no { color: #dc2626; }
+
+  .group {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    margin-bottom: 14px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(15,23,42,.04);
+    transition: opacity .15s, border-color .15s;
+  }
+  .group-header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 14px;
+    background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+    cursor: pointer; user-select: none;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .group-header:hover { background: linear-gradient(180deg, #f1f5f9 0%, #e2e8f0 100%); }
+  .group-num {
+    min-width: 30px; height: 30px; padding: 0 8px;
+    background: linear-gradient(135deg, #6366f1, #4f46e5);
+    color: #fff; border-radius: 8px; font-weight: 800; font-size: 13px;
+    display: inline-flex; align-items: center; justify-content: center;
+    flex-shrink: 0; box-shadow: 0 2px 6px rgba(79,70,229,.3);
+  }
+  .group-title-input {
+    flex: 1; min-width: 0; background: transparent; border: none;
+    font-size: 14.5px; font-weight: 700; color: #0f172a;
+    padding: 3px 8px; border-radius: 5px; outline: none; font-family: inherit;
+  }
+  .group-title-input:focus { background: #fff; box-shadow: 0 0 0 2px #6366f1; }
+  .group-title-input[readonly] { cursor: default; }
+  .group-title-input[readonly]:focus { background: transparent; box-shadow: none; }
+  .group-count {
+    padding: 3px 10px; background: #e2e8f0; color: #475569;
+    font-size: 11.5px; font-weight: 700; border-radius: 10px; flex-shrink: 0;
+  }
+  .dev-toggle {
+    padding: 4px 10px; border-radius: 8px;
+    font-size: 11px; font-weight: 700;
+    border: 1px solid transparent; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 5px;
+    transition: all .15s; flex-shrink: 0; font-family: inherit;
+  }
+  .dev-toggle.yes { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
+  .dev-toggle.no { background: #f1f5f9; color: #64748b; border-color: #e2e8f0; }
+  .dev-toggle:disabled { cursor: default; }
+
+  .group-body { display: none; }
+  .group.open .group-body { display: block; }
+
+  .group-chevron {
+    transition: transform .2s; color: #94a3b8;
+    font-size: 12px; flex-shrink: 0;
+  }
+  .group.open .group-chevron { transform: rotate(180deg); }
+
+  .print-title { display: none; }
+
+  @media (max-width: 900px) {
+    .checks-table { --cols: 26px 1fr 70px; --gap: 8px; }
+    .col-header { display: none; }
+    .rule-grid > div:nth-child(4),
+    .rule-grid > div:nth-child(5),
+    .rule-grid > div:nth-child(6) { grid-column: span 3; }
+  }
+
+  /* Тёмная тема */
+  .dark .group-header { background: #1e293b !important; border-color: #334155 !important; }
+  .dark .group { background: #1e293b !important; border-color: #334155 !important; }
+  .dark .rule-grid { background: #1e293b !important; border-color: #334155 !important; }
+  .dark .rule-grid:nth-child(even) { background: #0f172a !important; }
+  .dark .rule-grid:hover { background: #334155 !important; }
+  .dark .col-header { background: #334155 !important; border-color: #475569 !important; color: #e2e8f0 !important; }
+  .dark .group-title-input { color: #f1f5f9 !important; }
+  .dark .rule-cell { color: #e2e8f0 !important; }
+  .dark .rule-cell.note { color: #94a3b8 !important; }
+  .dark .val { background: #78350f !important; color: #fef3c7 !important; border-color: #92400e !important; }
+
+  @media print {
+    @page { size: A4 portrait; margin: 12mm 10mm; }
+    header, nav, footer, .no-print, .tabs-row, .filters-row, .stats-row,
+    #modeBadge, #loginBtn, #toast, #loginModal, #kbdHint, .progress,
+    .editor-only, button:not(.print-keep), .item-actions,
+    .drag-handle, .group-drag-handle { display: none !important; }
+    body, html { background: #fff !important; color: #000 !important; font-size: 9pt !important; }
+    main { margin: 0 !important; padding: 0 !important; max-width: 100% !important; }
+    .print-title { display: block !important; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 2px solid #4f46e5; }
+    .print-title h1 { font-size: 13pt; color: #1e293b; margin: 0; font-weight: 700; }
+    .print-title .sub { font-size: 8pt; color: #64748b; margin-top: 2px; }
+    .group { page-break-inside: avoid; border: 1px solid #64748b !important; margin-bottom: 8px !important; border-radius: 2px !important; background: #fff !important; box-shadow: none !important; overflow: visible !important; }
+    .group-body { display: block !important; }
+    .col-header, .rule-grid {
+      display: table !important; width: 100% !important;
+      table-layout: fixed !important; border-collapse: collapse !important;
+      margin: 0 !important; padding: 0 !important; gap: 0 !important;
+    }
+    .col-header > div, .rule-grid > div {
+      display: table-cell !important; vertical-align: top !important;
+      padding: 4px 5px !important; border-bottom: 1px solid #cbd5e1 !important;
+    }
+    .col-header > div:nth-child(1),
+    .rule-grid > div:nth-child(1) { display: none !important; width: 0 !important; }
+    .col-header > div:nth-child(6),
+    .rule-grid > div:nth-child(6) { display: none !important; width: 0 !important; }
+    .rule-cell { font-size: 7.5pt !important; line-height: 1.35 !important; color: #000 !important; padding: 0 !important; box-shadow: none !important; background: transparent !important; border: none !important; }
+    .apply-btn { display: none !important; }
+    .check-text { display: inline !important; font-size: 11pt !important; font-weight: 900 !important; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 stats-row" id="statsRow"></div>
+
+  <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+    <div class="px-3 sm:px-4 pt-3 pb-2 border-b border-slate-100 dark:border-slate-700">
+      <div id="tabs" class="flex flex-wrap items-center gap-1.5 bg-slate-100 dark:bg-slate-700 p-1.5 rounded-xl tabs-row"></div>
+    </div>
+
+    <div class="px-3 sm:px-4 py-3 border-b border-slate-200 dark:border-slate-700 flex flex-wrap items-center gap-2 filters-row">
+      <input type="text" id="searchInput" oninput="applyFilters()" placeholder="Поиск… (Ctrl+K)" class="flex-1 min-w-[180px] md:w-56 px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+      <select id="filterType" onchange="applyFilters()" class="py-2 px-3 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-sm">
+        <option value="">Все типы проверок</option>
+      </select>
+      <select id="filterDev" onchange="applyFilters()" class="py-2 px-3 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-sm">
+        <option value="">Все группы</option>
+        <option value="yes">Заявлено на доработку</option>
+        <option value="no">Без доработок</option>
+      </select>
+      <button onclick="openModalFilial()" class="editor-only px-3 py-2 bg-violet-600 hover:bg-violet-700 text-white text-xs font-medium rounded-xl">
+        <i class="fa-solid fa-building mr-1"></i> Филиал
+      </button>
+      <button onclick="openModalGroup()" class="editor-only px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-xl">
+        <i class="fa-solid fa-plus mr-1"></i> Группа
+      </button>
+      <button onclick="window.print()" class="print-keep px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-medium rounded-xl">
+        <i class="fa-solid fa-file-pdf mr-1"></i> PDF (A4)
+      </button>
+    </div>
+
+    <div class="print-title">
+      <h1>Реестр проверок показаний — <span id="printFilialName">Филиал</span></h1>
+      <div class="sub">Сформировано: <span id="printDate"></span></div>
+    </div>
+
+    <div id="content" class="p-4 sm:p-6 space-y-4 checks-table"></div>
+  </div>
+</div>
+
+<!-- МОДАЛКИ -->
+<div id="modalInput" class="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm hidden items-center justify-center p-4">
+  <div class="bg-white dark:bg-slate-800 rounded-2xl max-w-md w-full shadow-2xl overflow-hidden">
+    <div class="px-5 py-3 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-700">
+      <h3 id="modalTitle" class="text-base font-bold">Добавить</h3>
+      <button onclick="closeModalInput()" class="p-1.5 hover:bg-slate-200 rounded-lg"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="p-5 space-y-3">
+      <div>
+        <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1" id="modalLabel">Название</label>
+        <input type="text" id="modalField" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+      </div>
+    </div>
+    <div class="px-5 py-3 border-t border-slate-200 dark:border-slate-700 flex justify-end space-x-2 bg-slate-50 dark:bg-slate-700">
+      <button onclick="closeModalInput()" class="px-4 py-2 bg-white dark:bg-slate-600 border border-slate-200 dark:border-slate-500 text-sm rounded-xl hover:bg-slate-100">Отмена</button>
+      <button id="modalOkBtn" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-xl">OK</button>
+    </div>
+  </div>
+</div>
+
+<div id="modalFilial" class="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm hidden items-center justify-center p-4">
+  <div class="bg-white dark:bg-slate-800 rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden">
+    <div class="px-5 py-3 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-700">
+      <h3 class="text-base font-bold">Новый филиал</h3>
+      <button onclick="closeModalFilial()" class="p-1.5 hover:bg-slate-200 rounded-lg"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="p-5 space-y-4">
+      <div>
+        <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Название филиала *</label>
+        <input type="text" id="newFilialName" placeholder="Например: Самарский филиал" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Копировать правила из</label>
+        <select id="copyFromFilial" onchange="onCopySourceChange()" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          <option value="">— Не копировать —</option>
+        </select>
+        <div id="copyPreview" class="hidden mt-2 px-3 py-2 bg-indigo-50 border border-indigo-200 rounded-lg text-xs text-indigo-700">
+          Будет скопировано: <b id="copyGroupsCount">0</b> групп, <b id="copyRulesCount">0</b> правил
+        </div>
+      </div>
+    </div>
+    <div class="px-5 py-3 border-t border-slate-200 dark:border-slate-700 flex justify-end space-x-2 bg-slate-50 dark:bg-slate-700">
+      <button onclick="closeModalFilial()" class="px-4 py-2 bg-white dark:bg-slate-600 border border-slate-200 dark:border-slate-500 text-sm rounded-xl hover:bg-slate-100">Отмена</button>
+      <button onclick="createFilial()" class="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white text-sm rounded-xl">Создать</button>
+    </div>
+  </div>
+</div>
+
+<div id="modalPassword" class="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm hidden items-center justify-center p-4">
+  <div class="bg-white dark:bg-slate-800 rounded-2xl max-w-md w-full shadow-2xl overflow-hidden">
+    <div class="px-5 py-3 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-700">
+      <h3 class="text-base font-bold">Режим редактора</h3>
+      <button onclick="closePassword()" class="p-1.5 hover:bg-slate-200 rounded-lg"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="p-5 space-y-3">
+      <input type="password" id="passwordField" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+    </div>
+    <div class="px-5 py-3 border-t border-slate-200 dark:border-slate-700 flex justify-end space-x-2 bg-slate-50 dark:bg-slate-700">
+      <button onclick="closePassword()" class="px-4 py-2 bg-white dark:bg-slate-600 border border-slate-200 dark:border-slate-500 text-sm rounded-xl">Отмена</button>
+      <button onclick="checkPassword()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-xl">Войти</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='checks.js') }}"></script>{% endblock %}

@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Главная — Портал ЕЦП{% endblock %}
+{% block content %}
+<div class="space-y-6">
+  <!-- СВОДКИ -->
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+    {% for label, value in [('Отгулы', stats.timeoff), ('Групп проверок', stats.checks), ('Этапов предбиллинга', stats.checklist), ('Блоков обучения', stats.learning)] %}
+    <div class="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+      <div class="text-[10px] uppercase text-slate-500 dark:text-slate-400 mb-1">{{ label }}</div>
+      <div class="text-2xl font-bold tabular-nums text-slate-900 dark:text-white">{{ value }}</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- ОСТАЛЬНОЙ КОНТЕНТ (ваши карточки) -->
+  <div class="bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-2xl p-8 shadow-lg">
+    <h1 class="text-2xl sm:text-3xl font-bold mb-2">Рабочий портал ЕЦП</h1>
+    <p class="text-sm opacity-90">Единое место для учёта отгулов, проверок показаний, предбиллинга и обучения</p>
+  </div>
+
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    <a href="/timeoff" class="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-all group">
+      <div class="w-12 h-12 rounded-xl bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+        <i class="fa-solid fa-business-time text-xl"></i>
+      </div>
+      <h3 class="font-bold text-slate-900 dark:text-white mb-1">Ведомость отгулов</h3>
+      <p class="text-xs text-slate-500 dark:text-slate-400">Учёт переработок и отгулов, балансы сотрудников, прикрепление заявлений</p>
+    </a>
+
+    <a href="/checks" class="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-all group">
+      <div class="w-12 h-12 rounded-xl bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+        <i class="fa-solid fa-clipboard-check text-xl"></i>
+      </div>
+      <h3 class="font-bold text-slate-900 dark:text-white mb-1">Реестр проверок</h3>
+      <p class="text-xs text-slate-500 dark:text-slate-400">Индивидуальные правила проверок показаний по филиалам</p>
+    </a>
+
+    <a href="/checklist" class="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-all group">
+      <div class="w-12 h-12 rounded-xl bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+        <i class="fa-solid fa-calendar-check text-xl"></i>
+      </div>
+      <h3 class="font-bold text-slate-900 dark:text-white mb-1">Чек-лист предбиллинга</h3>
+      <p class="text-xs text-slate-500 dark:text-slate-400">Контроль сроков выполнения этапов по филиалам</p>
+    </a>
+
+    <a href="/learning" class="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-all group">
+      <div class="w-12 h-12 rounded-xl bg-sky-50 dark:bg-sky-900/30 text-sky-600 dark:text-sky-400 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+        <i class="fa-solid fa-graduation-cap text-xl"></i>
+      </div>
+      <h3 class="font-bold text-slate-900 dark:text-white mb-1">Обучение</h3>
+      <p class="text-xs text-slate-500 dark:text-slate-400">Материалы и курсы для сотрудников</p>
+    </a>
+  </div>
+</div>
+{% endblock %}

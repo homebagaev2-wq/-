@@ -1,0 +1,503 @@
+{% extends "base.html" %}
+{% block title %}Чек-лист предбиллинга — Портал ЕЦП{% endblock %}
+{% block page_title %}Чек-лист предбиллинга{% endblock %}
+{% block head %}
+<script>
+  // MathJax для формул в инструкциях
+  window.MathJax = {
+    tex: { inlineMath: [['$', '$'], ['\\(', '\\)']], displayMath: [['$$', '$$'], ['\\[', '\\]']] },
+    svg: { fontCache: 'global' }
+  };
+</script>
+<script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+<style>
+  .cl-screen.hidden { display: none !important; }
+
+  /* Филиалы */
+  .filial-card {
+    position: relative; padding: 22px 24px; border-radius: 14px;
+    border: 1px solid #e2e8f0; background: #fff; cursor: pointer;
+    transition: all .22s; box-shadow: 0 1px 3px rgba(15,23,42,.04); overflow: hidden;
+  }
+  .filial-card:hover { transform: translateY(-3px); box-shadow: 0 14px 28px -10px rgba(15,23,42,.18); border-color: #4f46e5; }
+  .filial-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; background: #4f46e5; color: #fff; font-size: 1.15rem; flex-shrink: 0; }
+  .filial-name { font-weight: 700; color: #0f172a; font-size: 1rem; }
+  .filial-meta { font-size: .78rem; color: #64748b; margin-top: 3px; }
+  .filial-progress-track { height: 6px; background: #e2e8f0; border-radius: 4px; overflow: hidden; margin-top: 14px; }
+  .filial-progress-fill { height: 100%; background: #4f46e5; border-radius: 4px; transition: width .5s; }
+
+  .detail-header { background: #fff; border-radius: 14px; border: 1px solid #e2e8f0; padding: 18px 22px; }
+  .progress-track { background: #e2e8f0; border-radius: 10px; height: 12px; overflow: hidden; }
+  .progress-fill { background: #10b981; height: 100%; border-radius: 10px; transition: width .5s; width: 0; }
+
+  /* Фазы */
+  .phase { margin-bottom: 22px; background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; }
+  .phase-header { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-bottom: 1px solid #e2e8f0; background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%); }
+  .phase-color { width: 6px; align-self: stretch; border-radius: 3px; background: var(--pc, #4f46e5); }
+  .phase-title { font-weight: 800; font-size: .95rem; color: #0f172a; text-transform: uppercase; }
+  .phase-sub { font-size: .72rem; color: #64748b; margin-top: 2px; }
+  .phase-progress { margin-left: auto; display: flex; align-items: center; gap: 10px; min-width: 180px; }
+  .phase-progress-track { flex: 1; height: 8px; background: #e2e8f0; border-radius: 6px; overflow: hidden; }
+  .phase-progress-fill { height: 100%; background: var(--pc, #4f46e5); border-radius: 6px; }
+  .phase-progress-text { font-size: 11.5px; font-weight: 700; color: #475569; min-width: 36px; text-align: right; }
+  .phase-body { padding: 16px; display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; background: #fafbfc; }
+
+  /* Карточка этапа */
+  .task-card {
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 12px;
+    padding: 14px 16px; cursor: pointer; position: relative;
+    transition: all .15s; border-left: 4px solid var(--tc, #cbd5e1);
+  }
+  .task-card:hover { box-shadow: 0 6px 18px -8px rgba(15,23,42,.15); border-color: #cbd5e1; transform: translateY(-1px); }
+  .task-card.status-done { --tc: #10b981; }
+  .task-card.status-warn { --tc: #f59e0b; }
+  .task-card.status-danger { --tc: #ef4444; }
+  .task-card.status-idle { --tc: #cbd5e1; }
+  .task-card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .task-num {
+    min-width: 28px; height: 28px; padding: 0 8px;
+    background: linear-gradient(135deg, #6366f1, #4f46e5); color: #fff;
+    border-radius: 7px; font-weight: 800; font-size: 12px;
+    display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .task-title { font-size: 13.5px; font-weight: 700; color: #0f172a; line-height: 1.35; }
+  .task-meta { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 10.5px; color: #64748b; flex-wrap: wrap; }
+  .task-meta-badge { display: inline-flex; align-items: center; gap: 3px; padding: 1px 7px; border-radius: 8px; font-weight: 700; font-size: 10px; background: #f1f5f9; color: #475569; }
+  .task-hint { font-size: 11px; color: #94a3b8; margin-top: 8px; display: flex; align-items: center; gap: 4px; }
+
+  /* Модалки */
+  .modal-backdrop {
+    position: fixed; inset: 0; z-index: 90;
+    background: rgba(15,23,42,.55); backdrop-filter: blur(4px);
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px; opacity: 0; visibility: hidden; transition: all .2s;
+  }
+  .modal-backdrop.open { opacity: 1; visibility: visible; }
+  .modal-card {
+    background: #fff; border-radius: 16px; width: 100%; max-width: 1100px;
+    max-height: 92vh; display: flex; flex-direction: column;
+    transform: translateY(10px) scale(.98); transition: transform .2s;
+    box-shadow: 0 24px 48px -12px rgba(0,0,0,.25); overflow: hidden;
+  }
+  .modal-backdrop.open .modal-card { transform: translateY(0) scale(1); }
+  .modal-body { overflow-y: auto; padding: 20px; flex: 1; }
+
+  /* Широкая таблица */
+  .wide-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .wide-table th {
+    background: #f1f5f9; color: #334155; font-weight: 700;
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em;
+    padding: 10px 8px; text-align: left; border-bottom: 2px solid #cbd5e1;
+    position: sticky; top: 0; z-index: 1;
+  }
+  .wide-table td { padding: 8px; border-bottom: 1px solid #e2e8f0; vertical-align: middle; }
+  .wide-table tr:hover { background: #f8fafc; }
+  .wide-table tr.sub td:first-child { padding-left: 28px; color: #475569; font-size: 12.5px; }
+  .wide-table .col-plan, .wide-table .col-fact { width: 150px; }
+  .wide-table .col-status { width: 130px; }
+  .wide-table .col-instr { width: 110px; }
+  .wide-table input[type="date"] {
+    width: 100%; padding: 6px 8px; font-size: 12px;
+    border: 1px solid #e2e8f0; border-radius: 6px; background: #fff; color: #1e293b;
+  }
+  .wide-table input[type="date"]:focus { border-color: #6366f1; box-shadow: 0 0 0 2px #eef2ff; outline: none; }
+  .wide-table input[type="date"]:disabled { background: #f8fafc; color: #475569; cursor: default; }
+
+  .status-pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 9px; border-radius: 8px; font-size: 11px; font-weight: 700;
+    border: 1px solid transparent; white-space: nowrap;
+  }
+  .status-done { background: #ecfdf5; color: #059669; border-color: #a7f3d0; }
+  .status-warn { background: #fffbeb; color: #d97706; border-color: #fde68a; }
+  .status-danger { background: #fef2f2; color: #dc2626; border-color: #fecaca; }
+  .status-idle { background: #f1f5f9; color: #64748b; border-color: #e2e8f0; }
+
+  .apply-btn {
+    width: 30px; height: 30px; border-radius: 7px;
+    border: 2px solid #cbd5e1; background: #f8fafc; color: #cbd5e1;
+    cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+    font-size: 16px; font-weight: 900; transition: all .15s;
+  }
+  .apply-btn:hover { transform: scale(1.08); }
+  .apply-btn.on { background: #ecfdf5; border-color: #6ee7b7; color: #059669; }
+  .apply-btn.off { background: #fef2f2; border-color: #fecaca; color: #dc2626; }
+
+  .instr-btn {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: #eef2ff; color: #4f46e5; border: 1px solid #e0e7ff;
+    padding: 3px 8px; border-radius: 6px; font-size: 10.5px; font-weight: 600; cursor: pointer;
+  }
+  .instr-btn:hover { background: #e0e7ff; }
+  .instr-btn.empty { background: transparent; border: 1px dashed #cbd5e1; color: #94a3b8; }
+
+  /* Массовые действия */
+  .bulk-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 14px; background: #f8fafc; border-radius: 10px; margin-bottom: 14px; border: 1px solid #e2e8f0; }
+  .bulk-toolbar input { padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; }
+  .bulk-toolbar button { padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; border: none; }
+  .bulk-btn-primary { background: #4f46e5; color: #fff; }
+  .bulk-btn-primary:hover { background: #4338ca; }
+  .bulk-btn-secondary { background: #fff; color: #475569; border: 1px solid #cbd5e1 !important; }
+
+  @media (max-width: 700px) {
+    .phase-body { grid-template-columns: 1fr; }
+    .wide-table { font-size: 12px; }
+    .wide-table .col-plan, .wide-table .col-fact { width: 110px; }
+  }
+
+  /* ============================================================
+     СТИЛИ ИНСТРУКЦИЙ (модалка «Инструкция»)
+     ============================================================ */
+  #clInstrViewBody { padding: 0; }
+
+  #clInstrViewBody .lesson-section {
+    padding: 16px 24px;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  #clInstrViewBody .lesson-section:last-child { border-bottom: none; }
+
+  #clInstrViewBody .lesson-section h2 {
+    font-size: 18px;
+    font-weight: 800;
+    color: #0f172a;
+    margin: 0 0 12px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #e0e7ff;
+  }
+  #clInstrViewBody .lesson-section h3 {
+    font-size: 14.5px;
+    font-weight: 700;
+    color: #1e293b;
+    margin: 16px 0 8px;
+  }
+  #clInstrViewBody .lesson-section p {
+    font-size: 13.5px;
+    line-height: 1.65;
+    color: #334155;
+    margin: 10px 0;
+  }
+  #clInstrViewBody .lesson-section ul,
+  #clInstrViewBody .lesson-section ol {
+    padding-left: 24px;
+    margin: 10px 0;
+  }
+  #clInstrViewBody .lesson-section li {
+    font-size: 13.5px;
+    line-height: 1.6;
+    color: #334155;
+    margin: 5px 0;
+  }
+
+  /* Callout-блоки */
+  #clInstrViewBody .lesson-callout {
+    display: flex;
+    gap: 12px;
+    padding: 14px 18px;
+    border-radius: 10px;
+    margin: 14px 0;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  #clInstrViewBody .lesson-callout.info {
+    background: #eff6ff;
+    border-left: 4px solid #3b82f6;
+    color: #1e3a8a;
+  }
+  #clInstrViewBody .lesson-callout.warn {
+    background: #fef3c7;
+    border-left: 4px solid #f59e0b;
+    color: #78350f;
+  }
+  #clInstrViewBody .lesson-callout.danger {
+    background: #fee2e2;
+    border-left: 4px solid #dc2626;
+    color: #7f1d1d;
+  }
+  #clInstrViewBody .lesson-callout-icon {
+    font-size: 20px;
+    flex-shrink: 0;
+    line-height: 1.3;
+  }
+  #clInstrViewBody .lesson-callout-body { flex: 1; min-width: 0; }
+
+  /* Таблицы */
+  #clInstrViewBody .lesson-table-wrap {
+    overflow-x: auto;
+    margin: 14px 0;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+  }
+  #clInstrViewBody .lesson-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+  }
+  #clInstrViewBody .lesson-table th {
+    background: #f1f5f9;
+    color: #334155;
+    font-weight: 700;
+    text-align: left;
+    padding: 9px 12px;
+    border-bottom: 2px solid #cbd5e1;
+    font-size: 11.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  #clInstrViewBody .lesson-table td {
+    padding: 9px 12px;
+    border-bottom: 1px solid #f1f5f9;
+    color: #334155;
+    vertical-align: top;
+  }
+  #clInstrViewBody .lesson-table tr:last-child td { border-bottom: none; }
+  #clInstrViewBody .lesson-table tr:nth-child(even) { background: #fafbfc; }
+
+  /* Формулы */
+  #clInstrViewBody .lesson-formula {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-left: 4px solid #4f46e5;
+    padding: 14px 18px;
+    margin: 14px 0;
+    border-radius: 8px;
+  }
+  #clInstrViewBody .lesson-formula-label {
+    font-size: 11px;
+    font-weight: 800;
+    color: #4f46e5;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 10px;
+  }
+
+  /* Шаги */
+  #clInstrViewBody .lesson-step { display: flex; gap: 12px; margin: 14px 0; }
+  #clInstrViewBody .lesson-step-num {
+    background: #4f46e5; color: #fff; width: 28px; height: 28px;
+    border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-weight: 800; flex-shrink: 0; font-size: 13px;
+  }
+  #clInstrViewBody .lesson-step-body { flex: 1; min-width: 0; }
+
+  /* Чек-лист */
+  #clInstrViewBody .lesson-checklist { list-style: none; padding: 0; margin: 12px 0; }
+  #clInstrViewBody .lesson-checklist li {
+    padding: 9px 0 9px 28px; position: relative;
+    border-bottom: 1px solid #f1f5f9;
+    font-size: 13px; color: #334155;
+  }
+  #clInstrViewBody .lesson-checklist li:last-child { border-bottom: none; }
+  #clInstrViewBody .lesson-checklist li::before {
+    content: "☐"; position: absolute; left: 0; top: 8px;
+    color: #4f46e5; font-weight: 700; font-size: 15px;
+  }
+
+  /* Числовые значения */
+  #clInstrViewBody .val {
+    display: inline-block; padding: 1px 7px; border-radius: 6px;
+    font-weight: 700; font-size: 12px;
+    background: #fef3c7; color: #92400e; border: 1px solid #fde68a;
+  }
+
+  /* MathJax — формулы по центру */
+  #clInstrViewBody mjx-container[display="true"] {
+    margin: 14px 0 !important;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  @media print {
+    #clInstrViewModal.modal-backdrop { position: static !important; background: #fff !important; opacity: 1 !important; visibility: visible !important; }
+    #clInstrViewModal .modal-card { max-width: 100% !important; box-shadow: none !important; transform: none !important; }
+  }
+  /* ============================================================
+     ТЁМНАЯ ТЕМА ДЛЯ ЧЕК-ЛИСТА
+     ============================================================ */
+  .dark .phase { background-color: #1e293b !important; border-color: #334155 !important; }
+  .dark .phase-header { background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%) !important; border-color: #334155 !important; }
+  .dark .phase-title { color: #f1f5f9 !important; }
+  .dark .phase-sub { color: #94a3b8 !important; }
+  .dark .phase-body { background: #0f172a !important; }
+  .dark .phase-progress-track { background: #334155 !important; }
+  .dark .phase-progress-text { color: #cbd5e1 !important; }
+
+  .dark .task-card { background-color: #1e293b !important; border-color: #334155 !important; }
+  .dark .task-card:hover { border-color: #475569 !important; }
+  .dark .task-title { color: #f1f5f9 !important; }
+  .dark .task-meta { color: #94a3b8 !important; }
+  .dark .task-meta-badge { background: #334155 !important; color: #cbd5e1 !important; }
+  .dark .task-hint { color: #64748b !important; }
+  .dark .task-num { background: linear-gradient(135deg, #6366f1, #4f46e5) !important; }
+
+  .dark .detail-header { background-color: #1e293b !important; border-color: #334155 !important; }
+  .dark .detail-title { color: #f1f5f9 !important; }
+  .dark .progress-track { background: #334155 !important; }
+
+  .dark .filial-card { background-color: #1e293b !important; border-color: #334155 !important; }
+  .dark .filial-name { color: #f1f5f9 !important; }
+  .dark .filial-meta { color: #94a3b8 !important; }
+  .dark .filial-progress-track { background: #334155 !important; }
+
+  .dark .modal-card { background-color: #1e293b !important; color: #e2e8f0 !important; }
+  .dark .modal-card .bg-slate-50 { background-color: #0f172a !important; }
+  .dark .modal-card .bg-slate-100 { background-color: #334155 !important; }
+  .dark .modal-card h3 { color: #f1f5f9 !important; }
+  .dark .modal-card p { color: #94a3b8 !important; }
+
+  .dark .wide-table { color: #e2e8f0 !important; }
+  .dark .wide-table th { background: #334155 !important; color: #e2e8f0 !important; border-color: #475569 !important; }
+  .dark .wide-table td { border-color: #334155 !important; color: #e2e8f0 !important; }
+  .dark .wide-table tr:hover { background: #334155 !important; }
+  .dark .wide-table input[type="date"] { background: #0f172a !important; color: #e2e8f0 !important; border-color: #475569 !important; }
+  .dark .wide-table input[type="date"]:disabled { background: #1e293b !important; color: #64748b !important; }
+
+  .dark .bulk-toolbar { background: #0f172a !important; border-color: #334155 !important; }
+  .dark .bulk-toolbar input { background: #1e293b !important; color: #e2e8f0 !important; border-color: #475569 !important; }
+  .dark .bulk-toolbar label { color: #cbd5e1 !important; }
+  .dark .bulk-btn-secondary { background: #1e293b !important; color: #cbd5e1 !important; border-color: #475569 !important; }
+
+  .dark .status-pill.status-idle { background: #334155 !important; color: #cbd5e1 !important; border-color: #475569 !important; }
+
+  /* Инструкции (модалка) */
+  .dark #clInstrViewBody { background: #1e293b !important; }
+  .dark #clInstrViewBody .lesson-section { border-color: #334155 !important; }
+  .dark #clInstrViewBody .lesson-section h2 { color: #f1f5f9 !important; border-color: #475569 !important; }
+  .dark #clInstrViewBody .lesson-section h3 { color: #e2e8f0 !important; }
+  .dark #clInstrViewBody .lesson-section p { color: #cbd5e1 !important; }
+  .dark #clInstrViewBody .lesson-section li { color: #cbd5e1 !important; }
+  .dark #clInstrViewBody .lesson-formula { background: #0f172a !important; border-color: #334155 !important; }
+  .dark #clInstrViewBody .lesson-formula-label { color: #818cf8 !important; }
+  .dark #clInstrViewBody .lesson-table th { background: #334155 !important; color: #e2e8f0 !important; }
+  .dark #clInstrViewBody .lesson-table td { border-color: #334155 !important; color: #cbd5e1 !important; }
+  .dark #clInstrViewBody .lesson-table tr:nth-child(even) { background: #0f172a !important; }
+  .dark #clInstrViewBody .lesson-callout.info { background: #1e3a8a !important; color: #dbeafe !important; }
+  .dark #clInstrViewBody .lesson-callout.warn { background: #78350f !important; color: #fef3c7 !important; }
+  .dark #clInstrViewBody .lesson-callout.danger { background: #7f1d1d !important; color: #fee2e2 !important; }
+  .dark #clInstrViewBody .val { background: #78350f !important; color: #fef3c7 !important; border-color: #92400e !important; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="max-width:1400px;margin:0 auto">
+
+  <section id="clScreenList" class="cl-screen">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+      <div>
+        <h1 class="text-xl font-bold text-slate-900 dark:text-white">Контроль сроков предбиллинга</h1>
+        <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Выберите филиал, чтобы открыть чек-лист</p>
+      </div>
+    </div>
+    <div id="clFilialGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+    <div id="clFilialEmpty" class="hidden py-16 text-center">
+      <div class="w-20 h-20 bg-indigo-50 text-indigo-500 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">
+        <i class="fa-solid fa-building"></i>
+      </div>
+      <h3 class="text-base font-bold text-slate-800">Пока нет ни одного филиала</h3>
+    </div>
+  </section>
+
+  <section id="clScreenDetail" class="cl-screen hidden">
+    <div class="mb-4 flex justify-end">
+      <button onclick="clBackToList()" class="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-semibold dark:bg-slate-700 dark:text-slate-200">
+        <i class="fa-solid fa-arrow-left"></i> Все филиалы
+      </button>
+    </div>
+
+    <div class="detail-header mb-4">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-3 min-w-0 flex-1">
+          <div id="clDetailIcon" class="filial-icon" style="background:#4f46e5">
+            <i class="fa-solid fa-building"></i>
+          </div>
+          <div class="min-w-0">
+            <h2 id="clDetailName" class="text-xl font-bold text-slate-900 dark:text-white truncate">Филиал</h2>
+            <p id="clDetailMeta" class="text-xs text-slate-500">0 задач</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 flex-wrap">
+          <div class="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5">
+            <label for="clMonthInput" class="text-[10px] font-bold text-slate-500 uppercase">Период:</label>
+            <input type="month" id="clMonthInput" class="bg-transparent border-none text-slate-900 text-xs font-semibold outline-none cursor-pointer">
+          </div>
+          <button onclick="clAddTask()" id="clAddTaskBtn" class="hidden px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl">
+            <i class="fa-solid fa-plus mr-1"></i> Задача
+          </button>
+          <button onclick="clOpenBulkDates()" class="px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 text-xs font-semibold rounded-xl">
+            <i class="fa-solid fa-calendar-days mr-1"></i> Даты
+          </button>
+          <button onclick="clExportXlsx()" class="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl">
+            <i class="fa-solid fa-file-excel mr-1"></i> Excel
+          </button>
+        </div>
+      </div>
+      <div class="mt-4">
+        <div class="flex justify-between mb-1.5 text-xs font-bold text-slate-700">
+          <span>Общий прогресс</span>
+          <span id="clProgressPercent">0%</span>
+        </div>
+        <div class="progress-track"><div class="progress-fill" id="clProgressFill"></div></div>
+      </div>
+    </div>
+
+    <div id="clTaskList"></div>
+  </section>
+</div>
+
+<!-- МОДАЛКА: Этап (план + факт) -->
+<div id="clStageModal" class="modal-backdrop">
+  <div class="modal-card">
+    <div class="px-5 py-3 border-b flex items-center justify-between bg-slate-50">
+      <div>
+        <h3 id="clStageTitle" class="text-base font-bold text-slate-900">Этап</h3>
+        <p id="clStageSub" class="text-xs text-slate-500"></p>
+      </div>
+      <button onclick="clCloseStageModal()" class="p-1.5 hover:bg-slate-200 rounded-lg"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="modal-body" id="clStageBody"></div>
+  </div>
+</div>
+
+<!-- МОДАЛКА: Даты (только план) -->
+<div id="clDatesModal" class="modal-backdrop">
+  <div class="modal-card">
+    <div class="px-5 py-3 border-b flex items-center justify-between bg-slate-50">
+      <div>
+        <h3 class="text-base font-bold text-slate-900">Плановые даты на месяц</h3>
+        <p class="text-xs text-slate-500">Проставьте плановые даты для всех задач филиала</p>
+      </div>
+      <button onclick="clCloseDatesModal()" class="p-1.5 hover:bg-slate-200 rounded-lg"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="modal-body">
+      <div class="bulk-toolbar">
+        <label class="text-xs font-semibold text-slate-600">Массово:</label>
+        <input type="number" id="clBulkDayInput" min="1" max="31" placeholder="День" class="w-20" value="5">
+        <button onclick="clBulkApplyDay()" class="bulk-btn-primary">Проставить день</button>
+        <button onclick="clBulkShiftDays(1)" class="bulk-btn-secondary">+1 день</button>
+        <button onclick="clBulkShiftDays(-1)" class="bulk-btn-secondary">−1 день</button>
+        <button onclick="clBulkClearPlan()" class="bulk-btn-secondary" style="color:#dc2626">Очистить</button>
+      </div>
+      <div id="clDatesTableWrap"></div>
+    </div>
+    <div class="px-5 py-3 border-t flex justify-end gap-2 bg-slate-50">
+      <button onclick="clCloseDatesModal()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-xl font-semibold">Готово</button>
+    </div>
+  </div>
+</div>
+
+<!-- МОДАЛКА: Инструкция -->
+<div id="clInstrViewModal" class="modal-backdrop">
+  <div class="modal-card">
+    <div class="px-5 py-3 border-b flex items-center justify-between bg-slate-50">
+      <h3 id="clInstrViewTitle" class="text-base font-bold">Инструкция</h3>
+      <button onclick="clCloseInstrView()" class="p-1.5 hover:bg-slate-200 rounded-lg"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="modal-body" id="clInstrViewBody"></div>
+    <div class="px-5 py-3 border-t flex justify-end bg-slate-50">
+      <button onclick="clCloseInstrView()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-sm rounded-xl">Закрыть</button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='checklist.js') }}"></script>{% endblock %}

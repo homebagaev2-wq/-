@@ -1,0 +1,1188 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ведомость отгулов и переработок</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  body { font-family: 'Inter', sans-serif; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+  .role-hidden { display: none; }
+  th.sortable { cursor: pointer; user-select: none; position: sticky; top: 0; background: white; z-index: 5; }
+  th.sortable:hover { color: #4f46e5; }
+  .sort-icon { margin-left: 4px; opacity: .35; font-size: 10px; }
+  th.sortable.active .sort-icon { opacity: 1; color: #4f46e5; }
+  tr.negative-row { background: #fff1f2; }
+  tr.negative-row:hover { background: #ffe4e6 !important; }
+  .avatar-c0 { background: #e0e7ff; color: #4338ca; }
+  .avatar-c1 { background: #d1fae5; color: #065f46; }
+  .avatar-c2 { background: #fef3c7; color: #92400e; }
+  .avatar-c3 { background: #fce7f3; color: #9d174d; }
+  .avatar-c4 { background: #e0f2fe; color: #075985; }
+  .avatar-c5 { background: #ede9fe; color: #5b21b6; }
+  .avatar-c6 { background: #ccfbf1; color: #115e59; }
+  .avatar-c7 { background: #fed7aa; color: #9a3412; }
+  @media print {
+    @page { size: A4 landscape; margin: 10mm; }
+    body * { visibility: hidden; }
+    #printArea, #printArea * { visibility: visible; }
+    #printArea { position: absolute; left: 0; top: 0; width: 100%; padding: 20px; }
+    .no-print, header, button, .stats-row, .tabs-row, .filters-row { display: none !important; }
+    tr.negative-row { background: #fff !important; }
+  }
+</style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+<!-- ЛОГИН -->
+<div id="loginOverlay" class="fixed inset-0 z-[100] bg-slate-900/70 backdrop-blur-md hidden items-center justify-center p-4">
+  <div class="bg-white rounded-2xl max-w-md w-full shadow-2xl p-6">
+    <div class="flex items-center space-x-3 mb-5">
+      <div class="w-12 h-12 rounded-xl bg-indigo-600 text-white flex items-center justify-center"><i class="fa-solid fa-user-shield text-xl"></i></div>
+      <div><h2 class="text-lg font-bold">Вход в систему</h2><p class="text-xs text-slate-500">Выберите себя из списка</p></div>
+    </div>
+    <label class="block text-xs font-semibold text-slate-600 uppercase mb-1.5">Кто вы?</label>
+    <select id="loginEmployee" onchange="onLoginChange()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white">
+      <option value="">— выберите себя —</option>
+      <option value="__manager__">👑 Руководитель (полный доступ)</option>
+    </select>
+    <div id="managerPasswordBlock" class="hidden mb-3">
+      <label class="block text-xs font-semibold text-slate-600 uppercase mb-1.5">Пароль руководителя</label>
+      <input id="managerPassword" type="password" placeholder="••••••" onkeydown="if(event.key==='Enter')doLogin()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white">
+      <p id="loginError" class="hidden text-xs text-rose-500 mt-1.5"></p>
+    </div>
+    <button onclick="doLogin()" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl shadow-sm">Войти</button>
+    <button onclick="loadFromServer().then(populateLoginList)" class="w-full mt-2 py-2 text-xs text-slate-500 hover:text-slate-700"><i class="fa-solid fa-rotate-right mr-1"></i> Обновить список сотрудников</button>
+  </div>
+</div>
+
+<!-- ШАПКА -->
+<header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm no-print">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+    <div class="flex items-center space-x-3 min-w-0">
+      <div class="bg-indigo-600 text-white p-2.5 rounded-xl shadow-md flex-shrink-0"><i class="fa-solid fa-business-time text-lg"></i></div>
+      <div class="min-w-0">
+        <h1 class="text-base sm:text-lg font-bold text-slate-900 truncate">Учет переработок и отгулов</h1>
+        <p class="text-xs text-slate-500 hidden sm:block truncate">Синхронизация в реальном времени</p>
+      </div>
+    </div>
+    <div class="flex items-center space-x-2 flex-shrink-0">
+      <div id="userBadge" class="hidden sm:flex items-center space-x-2 px-3 py-1.5 bg-slate-100 rounded-xl">
+        <div id="userAvatar" class="w-7 h-7 rounded-full bg-indigo-600 text-white text-xs font-bold flex items-center justify-center">И</div>
+        <div class="leading-tight">
+          <div id="userName" class="text-xs font-semibold text-slate-800 max-w-[100px] truncate">—</div>
+          <div id="userRole" class="text-[10px] text-slate-500">—</div>
+        </div>
+        <button onclick="logoutUser()" title="Сменить пользователя" class="text-slate-400 hover:text-slate-700 p-1"><i class="fa-solid fa-right-from-bracket text-xs"></i></button>
+      </div>
+      <button onclick="printReport()" class="hidden md:inline-flex items-center px-3 py-2 bg-slate-700 hover:bg-slate-800 text-white text-xs font-medium rounded-xl"><i class="fa-solid fa-print mr-1.5"></i> Печать</button>
+      <button onclick="exportToExcel()" class="hidden md:inline-flex items-center px-3 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-medium rounded-xl"><i class="fa-solid fa-file-excel mr-1.5"></i> Excel</button>
+    </div>
+  </div>
+</header>
+
+<main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 stats-row">
+    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+      <p class="text-[10px] font-medium text-slate-500 uppercase">Всего переработок</p>
+      <h3 id="statTotalOvertime" class="text-xl font-bold text-emerald-600 mt-0.5">0 ч</h3>
+    </div>
+    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+      <p class="text-[10px] font-medium text-slate-500 uppercase">Всего отгулов</p>
+      <h3 id="statTotalTimeoff" class="text-xl font-bold text-rose-600 mt-0.5">0 ч</h3>
+    </div>
+    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+      <p class="text-[10px] font-medium text-slate-500 uppercase">Общий баланс</p>
+      <h3 id="statTotalBalance" class="text-xl font-bold text-slate-900 mt-0.5">0 ч</h3>
+    </div>
+    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+      <p class="text-[10px] font-medium text-slate-500 uppercase">Сотрудников</p>
+      <h3 id="statTotalEmployees" class="text-xl font-bold text-slate-900 mt-0.5">0</h3>
+    </div>
+  </div>
+
+  <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+    <div class="border-b border-slate-200">
+      <div class="px-3 sm:px-4 pt-3 pb-2">
+        <div class="flex flex-wrap bg-slate-100 p-1 rounded-xl gap-1 tabs-row">
+          <button id="tabBtnBalance" onclick="switchTab('balance')" class="tab-btn px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium"><i class="fa-solid fa-id-card-clip mr-1.5"></i> Баланс</button>
+          <button id="tabBtnRecords" onclick="switchTab('records')" class="tab-btn px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium"><i class="fa-solid fa-list-check mr-1.5"></i> Журнал</button>
+          <button id="tabBtnCalendar" onclick="switchTab('calendar')" class="tab-btn px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium"><i class="fa-solid fa-calendar-days mr-1.5"></i> Календарь</button>
+          <button id="tabBtnHistory" onclick="switchTab('history')" class="tab-btn role-hidden px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium"><i class="fa-solid fa-clock-rotate-left mr-1.5"></i> История</button>
+          <button id="tabBtnTrash" onclick="switchTab('trash')" class="tab-btn role-hidden px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium"><i class="fa-solid fa-trash mr-1.5"></i> Корзина <span id="trashCount" class="ml-1 text-[10px] bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded-full">0</span></button>
+        </div>
+      </div>
+      <div class="px-3 sm:px-4 pb-3 pt-3 flex flex-wrap items-center gap-2 filters-row border-t border-slate-100">
+        <input type="text" id="searchInput" oninput="applyFilters()" placeholder="Поиск… (Ctrl+K)" class="flex-1 min-w-[160px] px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        <div class="flex items-center space-x-1 bg-slate-50 border border-slate-200 rounded-xl pr-1">
+          <input type="month" id="monthFilter" onchange="onMonthFilterChange()" class="py-2 px-3 bg-transparent text-sm focus:outline-none cursor-pointer">
+          <button onclick="clearMonthFilter()" title="Показать все месяцы" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg"><i class="fa-solid fa-xmark text-xs"></i></button>
+        </div>
+        <button onclick="openInitialBalanceModal()" id="btnAddEmployee" class="role-hidden px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-xl" title="Ctrl+N"><i class="fa-solid fa-user-plus mr-1"></i> Добавить сотрудника</button>
+        <button onclick="openModal('overtime')" class="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium rounded-xl" title="Ctrl+O"><i class="fa-solid fa-plus mr-1"></i> Переработка</button>
+        <button onclick="openModal('timeoff')" class="px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-medium rounded-xl" title="Ctrl+T"><i class="fa-solid fa-plus mr-1"></i> Отгул</button>
+      </div>
+    </div>
+
+    <div id="printArea">
+      <div class="hidden print:block p-4 border-b-2 border-slate-800">
+        <h1 class="text-xl font-bold">Ведомость отгулов и переработок</h1>
+        <p id="printSubtitle" class="text-sm text-slate-600"></p>
+      </div>
+
+      <div id="balanceView" class="p-4 sm:p-6">
+        <div id="balanceEmptyBig" class="hidden py-16 text-center">
+          <div class="w-20 h-20 bg-indigo-50 text-indigo-500 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl"><i class="fa-solid fa-users"></i></div>
+          <h3 class="text-lg font-bold text-slate-800">Сотрудников пока нет</h3>
+          <p class="text-sm text-slate-500 mt-1 mb-5">Добавьте первого сотрудника, чтобы начать учёт</p>
+          <button onclick="openInitialBalanceModal()" class="role-hidden inline-flex items-center px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl shadow-sm"><i class="fa-solid fa-user-plus mr-2"></i> Добавить первого сотрудника</button>
+        </div>
+        <div id="balanceTableWrap" class="overflow-x-auto max-h-[70vh] overflow-y-auto">
+          <table class="w-full text-left">
+            <thead>
+              <tr class="border-b border-slate-200 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                <th class="py-3 px-3 sortable" data-table="balance" data-field="name" onclick="setSort('balance','name')">Сотрудник <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th class="py-3 px-3 sortable" data-table="balance" data-field="init" onclick="setSort('balance','init')">Нач. баланс <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th class="py-3 px-3 sortable" data-table="balance" data-field="ot" onclick="setSort('balance','ot')">Переработки (+) <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th class="py-3 px-3 sortable" data-table="balance" data-field="to" onclick="setSort('balance','to')">Отгулы (−) <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th class="py-3 px-3 sortable" data-table="balance" data-field="balance" onclick="setSort('balance','balance')">Текущий баланс <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th class="py-3 px-3 text-right no-print"></th>
+              </tr>
+            </thead>
+            <tbody id="balanceTableBody" class="divide-y divide-slate-100 text-sm"></tbody>
+          </table>
+        </div>
+        <div id="emptyBalanceState" class="hidden py-12 text-center text-slate-400 text-sm">Ничего не найдено по фильтру</div>
+      </div>
+
+      <div id="recordsView" class="hidden p-4 sm:p-6">
+        <div id="recordsSummary" class="mb-3 text-xs text-slate-500"></div>
+        <div class="overflow-x-auto max-h-[70vh] overflow-y-auto">
+          <table class="w-full text-left">
+            <thead>
+              <tr class="border-b border-slate-200 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                <th class="py-3 px-3 sortable" data-table="records" data-field="type" onclick="setSort('records','type')">Тип <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th class="py-3 px-3 sortable" data-table="records" data-field="name" onclick="setSort('records','name')">Сотрудник <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th class="py-3 px-3 sortable" data-table="records" data-field="date" onclick="setSort('records','date')">Дата <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th class="py-3 px-3 sortable" data-table="records" data-field="hours" onclick="setSort('records','hours')">Часы <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th class="py-3 px-3">Основание</th>
+                <th class="py-3 px-3">PDF</th>
+                <th class="py-3 px-3 text-right no-print"></th>
+              </tr>
+            </thead>
+            <tbody id="recordsTableBody" class="divide-y divide-slate-100 text-sm"></tbody>
+          </table>
+        </div>
+        <div id="emptyRecordsState" class="hidden py-12 text-center text-slate-400 text-sm">Записи не найдены</div>
+      </div>
+
+      <div id="calendarView" class="hidden p-4 sm:p-6">
+        <div class="flex flex-col sm:flex-row items-center justify-between mb-4 gap-3 no-print">
+          <div class="flex items-center space-x-2">
+            <select id="calendarMonthSelect" onchange="onCalendarChange()" class="py-2 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm">
+              <option value="0">Январь</option><option value="1">Февраль</option><option value="2">Март</option>
+              <option value="3">Апрель</option><option value="4">Май</option><option value="5">Июнь</option>
+              <option value="6">Июль</option><option value="7">Август</option><option value="8">Сентябрь</option>
+              <option value="9">Октябрь</option><option value="10">Ноябрь</option><option value="11">Декабрь</option>
+            </select>
+            <select id="calendarYearSelect" onchange="onCalendarChange()" class="py-2 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm"></select>
+            <button onclick="goToday()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-sm rounded-xl">Сегодня</button>
+          </div>
+          <div class="flex items-center space-x-4 text-xs text-slate-500">
+            <div class="flex items-center space-x-1"><span class="w-3 h-3 bg-emerald-500 rounded-full"></span><span>Переработка</span></div>
+            <div class="flex items-center space-x-1"><span class="w-3 h-3 bg-rose-500 rounded-full"></span><span>Отгул</span></div>
+          </div>
+        </div>
+        <div class="border border-slate-200 rounded-2xl overflow-hidden">
+          <div class="grid grid-cols-7 bg-slate-100 text-center text-[11px] font-semibold text-slate-500 py-2"><div>Пн</div><div>Вт</div><div>Ср</div><div>Чт</div><div>Пт</div><div class="text-indigo-600">Сб</div><div class="text-indigo-600">Вс</div></div>
+          <div id="calendarGrid" class="grid grid-cols-7 bg-slate-200 gap-px"></div>
+        </div>
+      </div>
+
+      <div id="historyView" class="hidden p-4 sm:p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-sm font-bold">Журнал действий</h3>
+          <button onclick="clearHistory()" class="text-xs text-rose-600 hover:underline">Очистить</button>
+        </div>
+        <div id="historyList" class="space-y-2 max-h-[600px] overflow-y-auto"></div>
+        <div id="emptyHistoryState" class="hidden py-12 text-center text-slate-400 text-sm">История пуста</div>
+      </div>
+
+      <div id="trashView" class="hidden p-4 sm:p-6">
+        <div class="flex items-center justify-between mb-4">
+          <div><h3 class="text-sm font-bold">Удалённые записи</h3><p class="text-xs text-slate-500">Можно восстановить в течение 30 дней</p></div>
+          <button onclick="clearTrash()" class="text-xs text-rose-600 hover:underline">Очистить корзину</button>
+        </div>
+        <div id="trashList" class="space-y-2 max-h-[600px] overflow-y-auto"></div>
+        <div id="emptyTrashState" class="hidden py-12 text-center text-slate-400 text-sm">Корзина пуста</div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- МОДАЛКА ЗАПИСИ -->
+<div id="recordModal" class="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm hidden items-center justify-center p-4">
+  <div class="bg-white rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden max-h-[95vh] flex flex-col">
+    <div class="px-5 py-3 border-b flex items-center justify-between bg-slate-50">
+      <h3 id="modalTitle" class="text-base font-bold">Добавить запись</h3>
+      <button onclick="closeModal()" class="p-1.5 hover:bg-slate-200 rounded-lg"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <form id="recordForm" onsubmit="saveRecord(event)" class="p-5 space-y-3 overflow-y-auto">
+      <input type="hidden" id="recordId">
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Тип *</label>
+          <select id="recordType" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-sm">
+            <option value="overtime">🟢 Переработка (+)</option>
+            <option value="timeoff">🔴 Отгул (−)</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Часы *</label>
+          <input type="number" id="recordHours" required min="0.5" max="24" step="0.5" value="8" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-sm">
+        </div>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-slate-600 mb-1">Сотрудник *</label>
+        <select id="employeeName" required class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-sm"></select>
+        <p id="employeeLockedHint" class="hidden text-[10px] text-slate-400 mt-1">Можно вносить записи только на себя</p>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-slate-600 mb-1">Дата *</label>
+        <input type="date" id="recordDate" required class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-sm">
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-slate-600 mb-1">Причина / основание</label>
+        <input type="text" id="recordReason" placeholder="например, работа в выходной" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-sm">
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-slate-600 mb-1">Заявление (PDF)</label>
+        <div class="border-2 border-dashed rounded-xl p-4 text-center cursor-pointer hover:border-indigo-400" onclick="document.getElementById('pdfFile').click()">
+          <i class="fa-solid fa-file-pdf text-2xl text-rose-500 mb-1"></i>
+          <p id="fileNameDisplay" class="text-xs text-slate-500">Нажмите для выбора PDF (до 20 МБ)</p>
+          <input id="pdfFile" type="file" accept="application/pdf" class="hidden" onchange="handleFileSelect(event)">
+        </div>
+      </div>
+      <div class="flex justify-end space-x-2 pt-3 border-t">
+        <button type="button" onclick="closeModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-sm rounded-xl">Отмена</button>
+        <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-xl">Сохранить</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- МОДАЛКА НАЧ. БАЛАНСА -->
+<div id="initialBalanceModal" class="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm hidden items-center justify-center p-4">
+  <div class="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden">
+    <div class="px-5 py-3 border-b flex items-center justify-between bg-slate-50">
+      <h3 class="text-base font-bold">Сотрудник / начальный баланс</h3>
+      <button onclick="closeInitialBalanceModal()" class="p-1.5 hover:bg-slate-200 rounded-lg"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <form onsubmit="saveInitialBalance(event)" class="p-5 space-y-3">
+      <div><label class="block text-xs font-semibold text-slate-600 mb-1">ФИО *</label><input type="text" id="initEmployeeName" required placeholder="Петров Петр Петрович" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-sm"></div>
+      <div><label class="block text-xs font-semibold text-slate-600 mb-1">Дата среза *</label><input type="date" id="initCutoffDate" required value="2026-09-01" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-sm"></div>
+      <div><label class="block text-xs font-semibold text-slate-600 mb-1">Часы переработки *</label><input type="number" id="initHours" required step="0.5" value="0" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-sm"></div>
+      <div class="flex justify-end space-x-2 pt-3 border-t">
+        <button type="button" onclick="closeInitialBalanceModal()" class="px-4 py-2 bg-slate-100 text-sm rounded-xl">Отмена</button>
+        <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-xl">Сохранить</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- PDF -->
+<div id="pdfModal" class="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm hidden items-center justify-center p-4">
+  <div class="bg-white rounded-2xl max-w-4xl w-full h-[88vh] shadow-2xl flex flex-col overflow-hidden">
+    <div class="px-5 py-3 border-b flex items-center justify-between bg-slate-50">
+      <div class="flex items-center space-x-2"><i class="fa-solid fa-file-pdf text-rose-500"></i><h3 id="pdfModalTitle" class="text-sm font-bold">Документ</h3></div>
+      <div class="flex items-center space-x-2">
+        <a id="downloadPdfBtn" href="#" download class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg"><i class="fa-solid fa-download mr-1"></i> Скачать</a>
+        <button onclick="closePdfModal()" class="p-1.5 hover:bg-slate-200 rounded-lg"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+    </div>
+    <iframe id="pdfViewerFrame" class="flex-1 w-full bg-slate-100" src=""></iframe>
+  </div>
+</div>
+
+<!-- АНАЛИТИКА -->
+<div id="analyticsModal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm hidden items-center justify-center p-4">
+  <div class="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] shadow-2xl flex flex-col overflow-hidden">
+    <div class="px-5 py-3 border-b flex items-center justify-between bg-slate-50">
+      <h3 id="analyticsModalTitle" class="text-base font-bold">Аналитика</h3>
+      <button onclick="closeAnalyticsModal()" class="p-1.5 hover:bg-slate-200 rounded-lg"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="p-5 space-y-4 overflow-y-auto">
+      <div class="grid grid-cols-3 gap-3">
+        <div class="bg-emerald-50 border border-emerald-100 p-3 rounded-xl text-center"><p class="text-[10px] font-semibold text-emerald-600 uppercase">Переработки</p><h4 id="analyticsStatOvertime" class="text-lg font-bold text-emerald-700 mt-1">0 ч</h4></div>
+        <div class="bg-rose-50 border border-rose-100 p-3 rounded-xl text-center"><p class="text-[10px] font-semibold text-rose-600 uppercase">Отгулы</p><h4 id="analyticsStatTimeoff" class="text-lg font-bold text-rose-700 mt-1">0 ч</h4></div>
+        <div class="bg-indigo-50 border border-indigo-100 p-3 rounded-xl text-center"><p class="text-[10px] font-semibold text-indigo-600 uppercase">Итого</p><h4 id="analyticsStatNet" class="text-lg font-bold text-indigo-700 mt-1">0 ч</h4></div>
+      </div>
+      <div class="h-72 bg-white p-3 rounded-2xl border"><canvas id="employeeAnalyticsChart"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<!-- МОДАЛКА: ЗАПИСИ СОТРУДНИКА -->
+<div id="employeeRecordsModal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm hidden items-center justify-center p-4">
+  <div class="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] shadow-2xl flex flex-col overflow-hidden">
+    <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+      <div class="flex items-center space-x-3 min-w-0">
+        <div id="erAvatar" class="w-11 h-11 rounded-full bg-indigo-100 text-indigo-700 text-sm font-bold flex items-center justify-center flex-shrink-0">И</div>
+        <div class="min-w-0">
+          <h3 id="erName" class="text-base font-bold text-slate-900 truncate">Сотрудник</h3>
+          <p class="text-xs text-slate-500">Список заявленных переработок и отгулов</p>
+        </div>
+      </div>
+      <button onclick="closeEmployeeRecords()" class="p-1.5 hover:bg-slate-200 rounded-lg flex-shrink-0"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 px-5 py-4 bg-white border-b border-slate-200">
+      <div class="bg-slate-50 border border-slate-200 p-3 rounded-xl text-center"><p class="text-[10px] font-semibold text-slate-500 uppercase">Нач. баланс</p><h4 id="erStatInit" class="text-base font-bold text-slate-800 mt-0.5">0 ч</h4></div>
+      <div class="bg-emerald-50 border border-emerald-100 p-3 rounded-xl text-center"><p class="text-[10px] font-semibold text-emerald-600 uppercase">Переработки</p><h4 id="erStatOt" class="text-base font-bold text-emerald-700 mt-0.5">0 ч</h4></div>
+      <div class="bg-rose-50 border border-rose-100 p-3 rounded-xl text-center"><p class="text-[10px] font-semibold text-rose-600 uppercase">Отгулы</p><h4 id="erStatTo" class="text-base font-bold text-rose-700 mt-0.5">0 ч</h4></div>
+      <div class="bg-indigo-50 border border-indigo-100 p-3 rounded-xl text-center"><p class="text-[10px] font-semibold text-indigo-600 uppercase">Текущий баланс</p><h4 id="erStatBal" class="text-base font-bold text-indigo-700 mt-0.5">0 ч</h4></div>
+    </div>
+
+    <div class="px-5 py-3 flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50">
+      <div class="flex bg-slate-200 p-0.5 rounded-lg">
+        <button id="erTabAll" onclick="setErFilter('all')" class="px-3 py-1.5 rounded-md text-xs font-semibold transition-all bg-white shadow-sm text-slate-900">Все</button>
+        <button id="erTabOt"  onclick="setErFilter('overtime')" class="px-3 py-1.5 rounded-md text-xs font-semibold transition-all text-slate-600 hover:text-slate-900">Переработки</button>
+        <button id="erTabTo"  onclick="setErFilter('timeoff')"  class="px-3 py-1.5 rounded-md text-xs font-semibold transition-all text-slate-600 hover:text-slate-900">Отгулы</button>
+      </div>
+      <div class="flex items-center gap-2">
+        <span id="erCount" class="text-[11px] text-slate-500"></span>
+        <button id="erAddBtn" onclick="closeEmployeeRecords(); openModalForEmployee(currentErName);" class="role-hidden inline-flex items-center px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg">
+          <i class="fa-solid fa-plus mr-1"></i> Добавить запись
+        </button>
+      </div>
+    </div>
+
+    <div id="erList" class="p-5 space-y-2 overflow-y-auto flex-1 bg-white"></div>
+    <div id="erEmpty" class="hidden py-12 text-center text-slate-400 text-sm bg-white">
+      <i class="fa-solid fa-inbox text-3xl mb-2 opacity-40 block"></i>
+      У сотрудника пока нет записей
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast" class="fixed bottom-5 right-5 z-[200] transform translate-y-20 opacity-0 transition-all bg-slate-900 text-white px-4 py-3 rounded-xl shadow-xl flex items-center space-x-3 text-sm">
+  <i id="toastIcon" class="fa-solid fa-circle-check text-emerald-400"></i>
+  <span id="toastMessage">Готово</span>
+</div>
+
+<script>
+let state = {
+  data: { initialBalances: {}, records: [], history: [], trash: [], version: 0 },
+  user: null,
+  activeTab: 'balance',
+  calendarDate: new Date(),
+  currentUploadedFile: { name: null, file: null },
+  chart: null,
+  lastVersion: 0,
+  analyticsEmployee: null,
+  sort: {
+    balance: { field: 'name', dir: 'asc' },
+    records: { field: 'date', dir: 'desc' }
+  }
+};
+
+const API = {
+  get:    () => fetch('/api/data?_=' + Date.now()).then(r => r.json()),
+  save:   (data) => fetch('/api/data', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({data})}).then(r => r.json()),
+  ping:   () => fetch('/api/ping?_=' + Date.now()).then(r => r.json()).catch(() => ({ok:false})),
+  upload: (file) => { const fd = new FormData(); fd.append('file', file); return fetch('/api/upload', {method:'POST', body: fd}).then(r => r.json()); },
+  authManager: (password) => fetch('/api/auth/manager', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({password})}).then(r => r.json())
+};
+
+function saveUiPrefs() {
+  try { localStorage.setItem('vedomost_ui', JSON.stringify({ monthFilter: document.getElementById('monthFilter').value, search: document.getElementById('searchInput').value, tab: state.activeTab, sort: state.sort })); } catch(e){}
+}
+function loadUiPrefs() {
+  try {
+    const p = JSON.parse(localStorage.getItem('vedomost_ui') || '{}');
+    if (p.monthFilter) document.getElementById('monthFilter').value = p.monthFilter;
+    if (p.search) document.getElementById('searchInput').value = p.search;
+    if (p.sort) state.sort = p.sort;
+    if (p.tab && ['balance','records','calendar'].includes(p.tab)) state.activeTab = p.tab;
+  } catch(e){}
+}
+
+function avatarClass(name) {
+  let h = 0;
+  for (let i = 0; i < (name || '').length; i++) h = (h * 31 + name.charCodeAt(i)) | 0;
+  return 'avatar-c' + (Math.abs(h) % 8);
+}
+
+function loadUser() { try { state.user = JSON.parse(localStorage.getItem('vedomost_user') || 'null'); } catch(e) { state.user = null; } }
+function saveUser() { try { localStorage.setItem('vedomost_user', JSON.stringify(state.user)); } catch(e){} }
+function populateLoginList() {
+  const sel = document.getElementById('loginEmployee'); if (!sel) return;
+  const current = sel.value;
+  sel.innerHTML = '<option value="">— выберите себя —</option><option value="__manager__">👑 Руководитель (полный доступ)</option>';
+  Object.keys(state.data.initialBalances || {}).sort((a,b) => a.localeCompare(b)).forEach(n => { const o = document.createElement('option'); o.value = n; o.textContent = n; sel.appendChild(o); });
+  if (current) sel.value = current;
+}
+function onLoginChange() {
+  const val = document.getElementById('loginEmployee').value;
+  const block = document.getElementById('managerPasswordBlock');
+  const err = document.getElementById('loginError');
+  err.classList.add('hidden');
+  if (val === '__manager__') block.classList.remove('hidden'); else block.classList.add('hidden');
+}
+async function doLogin() {
+  const sel = document.getElementById('loginEmployee').value;
+  const err = document.getElementById('loginError');
+  err.classList.add('hidden');
+  if (!sel) { err.textContent = 'Выберите себя из списка'; err.classList.remove('hidden'); return; }
+  if (sel === '__manager__') {
+    const pwd = document.getElementById('managerPassword').value;
+    const res = await API.authManager(pwd);
+    if (!res.ok) { err.textContent = 'Неверный пароль'; err.classList.remove('hidden'); return; }
+    state.user = { name: 'Руководитель', role: 'manager' };
+  } else {
+    state.user = { name: sel, role: 'employee' };
+  }
+  saveUser(); applyUserUI(); hideLogin(); renderApp();
+  showToast(`Добро пожаловать, ${state.user.name}`);
+}
+function hideLogin() { document.getElementById('loginOverlay').classList.add('hidden'); document.getElementById('loginOverlay').classList.remove('flex'); }
+function showLogin() { populateLoginList(); document.getElementById('loginOverlay').classList.remove('hidden'); document.getElementById('loginOverlay').classList.add('flex'); }
+function logoutUser() {
+  if (!confirm('Сменить пользователя?')) return;
+  state.user = null;
+  localStorage.removeItem('vedomost_user');
+  document.getElementById('managerPassword').value = '';
+  showLogin();
+}
+function applyUserUI() {
+  if (!state.user) return;
+  document.getElementById('userAvatar').textContent = getInitials(state.user.name);
+  document.getElementById('userName').textContent = state.user.name;
+  document.getElementById('userRole').textContent = state.user.role === 'manager' ? 'Руководитель' : 'Сотрудник';
+  const isMgr = state.user.role === 'manager';
+  document.querySelectorAll('.role-hidden').forEach(el => {
+    if (isMgr) { el.classList.remove('role-hidden'); if (el.style.display === 'none') el.style.display = ''; }
+    else { el.classList.add('role-hidden'); el.style.display = ''; }
+  });
+}
+function isManager() { return state.user && state.user.role === 'manager'; }
+function matchesUser(name) {
+  if (!state.user) return false;
+  if (state.user.role === 'manager') return true;
+  return String(name || '').trim().toLowerCase() === state.user.name.trim().toLowerCase();
+}
+function canEditRecord(r) {
+  if (!state.user) return false;
+  if (state.user.role === 'manager') return true;
+  return matchesUser(r.employeeName);
+}
+
+async function loadFromServer() {
+  const res = await API.get();
+  if (res && res.ok) {
+    state.data = res.data;
+    state.data.history = state.data.history || [];
+    state.data.trash = state.data.trash || [];
+    state.lastVersion = state.data.version;
+  }
+}
+async function saveToServer(action, details) {
+  logAction(action, details || {});
+  const res = await API.save(state.data);
+  if (res && res.ok) { state.lastVersion = res.version; state.data.version = res.version; }
+  else { showToast('Ошибка сохранения', 'error'); }
+}
+
+function logAction(action, details) {
+  state.data.history.unshift({ id: Date.now().toString() + Math.random().toString(36).slice(2,6), ts: Date.now(), user: state.user ? state.user.name : 'Аноним', role: state.user ? state.user.role : 'unknown', action, details });
+  if (state.data.history.length > 500) state.data.history.length = 500;
+}
+function renderHistory() {
+  const list = document.getElementById('historyList');
+  const empty = document.getElementById('emptyHistoryState');
+  const items = state.data.history || [];
+  if (!items.length) { list.innerHTML = ''; empty.classList.remove('hidden'); return; }
+  empty.classList.add('hidden');
+  list.innerHTML = items.map(h => `
+    <div class="flex items-start space-x-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+      <div class="w-8 h-8 rounded-full ${avatarClass(h.user)} text-xs font-bold flex items-center justify-center">${getInitials(h.user)}</div>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-sm font-semibold text-slate-800">${escapeHtml(h.user)}</span>
+          <span class="text-[10px] text-slate-400 whitespace-nowrap">${formatDateTime(h.ts)}</span>
+        </div>
+        <div class="text-xs text-slate-600 mt-0.5">${actionLabel(h.action, h.details)}</div>
+      </div>
+    </div>`).join('');
+}
+function actionLabel(action, d) {
+  const emp = (d && d.employeeName) || '—';
+  const h = (d && d.hours) || '';
+  switch(action) {
+    case 'add_record':    return `➕ Добавил ${d.type === 'overtime' ? 'переработку' : 'отгул'} для <b>${escapeHtml(emp)}</b> (${h} ч)`;
+    case 'edit_record':   return `✏️ Изменил запись <b>${escapeHtml(emp)}</b> (${h} ч)`;
+    case 'delete_record': return `🗑 Удалил запись <b>${escapeHtml(emp)}</b> (${h} ч)`;
+    case 'restore_record':return `♻️ Восстановил запись <b>${escapeHtml(emp)}</b> (${h} ч)`;
+    case 'add_employee':  return `👤 Добавил сотрудника <b>${escapeHtml(emp)}</b>`;
+    case 'edit_employee': return `👤 Изменил данные сотрудника <b>${escapeHtml(emp)}</b>`;
+    case 'delete_employee':return `❌ Удалил сотрудника <b>${escapeHtml(emp)}</b>`;
+    case 'clear_trash':   return `🧹 Очистил корзину`;
+    case 'clear_history': return `🧹 Очистил историю`;
+    default: return action;
+  }
+}
+async function clearHistory() { if (!confirm('Очистить всю историю действий?')) return; state.data.history = []; await saveToServer('clear_history', {}); renderHistory(); }
+function formatDateTime(ts) { const d = new Date(ts); return `${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}.${d.getFullYear()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; }
+
+function pushToTrash(record) {
+  state.data.trash.unshift({ id: record.id, deletedAt: Date.now(), deletedBy: state.user ? state.user.name : '—', original: record });
+  if (state.data.trash.length > 200) state.data.trash.length = 200;
+}
+function renderTrash() {
+  const list = document.getElementById('trashList');
+  const empty = document.getElementById('emptyTrashState');
+  const items = state.data.trash || [];
+  document.getElementById('trashCount').textContent = items.length;
+  if (!items.length) { list.innerHTML = ''; empty.classList.remove('hidden'); return; }
+  empty.classList.add('hidden');
+  list.innerHTML = items.map(t => {
+    const r = t.original;
+    const isOt = r.type === 'overtime';
+    return `<div class="flex items-center space-x-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+      <div class="w-8 h-8 rounded-full ${isOt ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'} text-xs font-bold flex items-center justify-center">${isOt ? '+' : '−'}</div>
+      <div class="flex-1 min-w-0">
+        <div class="text-sm font-semibold text-slate-800">${escapeHtml(r.employeeName)} <span class="text-xs font-normal text-slate-500">(${r.hours} ч, ${formatDateRu(r.date)})</span></div>
+        <div class="text-[11px] text-slate-500">Удалил: ${escapeHtml(t.deletedBy)} · ${formatDateTime(t.deletedAt)}</div>
+        <div class="text-xs text-slate-600 italic truncate">${escapeHtml(r.reason || '—')}</div>
+      </div>
+      <button onclick="restoreFromTrash('${t.id}')" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs rounded-lg"><i class="fa-solid fa-rotate-left mr-1"></i> Вернуть</button>
+    </div>`;
+  }).join('');
+}
+async function restoreFromTrash(trashId) {
+  const idx = state.data.trash.findIndex(t => t.id === trashId);
+  if (idx === -1) return;
+  const item = state.data.trash[idx];
+  state.data.records.push(item.original);
+  state.data.trash.splice(idx, 1);
+  await saveToServer('restore_record', { employeeName: item.original.employeeName, hours: item.original.hours });
+  renderApp(); showToast('Запись восстановлена');
+}
+async function clearTrash() { if (!confirm('Очистить корзину безвозвратно?')) return; state.data.trash = []; await saveToServer('clear_trash', {}); renderApp(); showToast('Корзина очищена'); }
+
+function onMonthFilterChange() {
+  const val = document.getElementById('monthFilter').value;
+  saveUiPrefs(); applyFilters();
+  if (val) {
+    const parts = val.split('-');
+    const y = parseInt(parts[0]), m = parseInt(parts[1]);
+    state.calendarDate = new Date(y, m - 1, 1);
+    document.getElementById('calendarMonthSelect').value = m - 1;
+    document.getElementById('calendarYearSelect').value = y;
+    switchTab('calendar');
+  }
+}
+function clearMonthFilter() { document.getElementById('monthFilter').value = ''; saveUiPrefs(); applyFilters(); }
+function applyFilters() { saveUiPrefs(); renderBalanceTable(); renderRecordsTable(); renderCalendar(); }
+function switchTab(tab) {
+  state.activeTab = tab;
+  ['balance','records','calendar','history','trash'].forEach(t => {
+    const view = document.getElementById(t + 'View');
+    const btn = document.getElementById('tabBtn' + t.charAt(0).toUpperCase() + t.slice(1));
+    if (!view || !btn) return;
+    view.classList.toggle('hidden', t !== tab);
+    btn.className = 'tab-btn px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium ' + (t === tab ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900');
+  });
+  if (tab === 'history') renderHistory();
+  if (tab === 'trash') renderTrash();
+  saveUiPrefs();
+}
+function renderApp() { updateStats(); renderBalanceTable(); renderRecordsTable(); renderCalendar(); renderTrash(); updateEmployeeDropdown(); updateSortIcons(); switchTab(state.activeTab); }
+function updateStats() {
+  const records = state.data.records || [];
+  const visible = records.filter(r => matchesUser(r.employeeName));
+  const init = Object.entries(state.data.initialBalances || {}).filter(([n]) => matchesUser(n)).reduce((s, [,o]) => s + parseFloat(o.hours||0), 0);
+  const ot = visible.filter(r => r.type === 'overtime').reduce((s,r) => s + parseFloat(r.hours||0), 0);
+  const to = visible.filter(r => r.type === 'timeoff').reduce((s,r) => s + parseFloat(r.hours||0), 0);
+  const bal = init + ot - to;
+  const emps = new Set([...Object.keys(state.data.initialBalances || {}).filter(matchesUser), ...visible.map(r => r.employeeName)]);
+  document.getElementById('statTotalOvertime').textContent = (init + ot) + ' ч';
+  document.getElementById('statTotalTimeoff').textContent = to + ' ч';
+  const b = document.getElementById('statTotalBalance');
+  b.textContent = (bal > 0 ? '+' : '') + bal + ' ч';
+  b.className = `text-xl font-bold mt-0.5 ${bal > 0 ? 'text-emerald-600' : bal < 0 ? 'text-rose-600' : 'text-slate-900'}`;
+  document.getElementById('statTotalEmployees').textContent = emps.size;
+}
+function updateEmployeeDropdown() {
+  const sel = document.getElementById('employeeName');
+  sel.innerHTML = '';
+  const employees = Object.keys(state.data.initialBalances || {}).sort();
+  if (!employees.length) { const o = document.createElement('option'); o.value = ''; o.textContent = 'Сначала добавьте сотрудника'; sel.appendChild(o); return; }
+  employees.forEach(n => { const o = document.createElement('option'); o.value = n; o.textContent = n; sel.appendChild(o); });
+}
+function getFilteredRecords() {
+  const q = (document.getElementById('searchInput').value || '').toLowerCase().trim();
+  const mf = document.getElementById('monthFilter').value;
+  return (state.data.records || []).filter(r => {
+    if (!matchesUser(r.employeeName)) return false;
+    const t = (r.employeeName + ' ' + (r.reason || '')).toLowerCase();
+    if (q && !t.includes(q)) return false;
+    if (mf && !(r.date || '').startsWith(mf)) return false;
+    return true;
+  });
+}
+
+function setSort(table, field) {
+  const s = state.sort[table];
+  if (s.field === field) s.dir = s.dir === 'asc' ? 'desc' : 'asc';
+  else { s.field = field; s.dir = 'asc'; }
+  updateSortIcons(); saveUiPrefs();
+  if (table === 'balance') renderBalanceTable(); else renderRecordsTable();
+}
+function updateSortIcons() {
+  document.querySelectorAll('th.sortable').forEach(th => {
+    const t = th.dataset.table, f = th.dataset.field;
+    const s = state.sort[t];
+    const icon = th.querySelector('.sort-icon');
+    if (!icon) return;
+    th.classList.toggle('active', s.field === f);
+    if (s.field === f) icon.className = 'fa-solid ' + (s.dir === 'asc' ? 'fa-sort-up' : 'fa-sort-down') + ' sort-icon';
+    else icon.className = 'fa-solid fa-sort sort-icon';
+  });
+}
+
+function renderBalanceTable() {
+  const tbody = document.getElementById('balanceTableBody');
+  const empty = document.getElementById('emptyBalanceState');
+  const emptyBig = document.getElementById('balanceEmptyBig');
+  const tableWrap = document.getElementById('balanceTableWrap');
+  tbody.innerHTML = '';
+  const all = new Set([...Object.keys(state.data.initialBalances || {}), ...(state.data.records || []).map(r => r.employeeName)]);
+  const map = {};
+  all.forEach(name => { map[name] = { init: (state.data.initialBalances[name] || {}).hours || 0, date: (state.data.initialBalances[name] || {}).date || '—', ot: 0, to: 0 }; });
+  (state.data.records || []).forEach(r => {
+    if (!map[r.employeeName]) map[r.employeeName] = { init: 0, date: '—', ot: 0, to: 0 };
+    if (r.type === 'overtime') map[r.employeeName].ot += parseFloat(r.hours || 0);
+    else map[r.employeeName].to += parseFloat(r.hours || 0);
+  });
+  let names = Array.from(all).filter(matchesUser);
+  if (!names.length && isManager()) { emptyBig.classList.remove('hidden'); tableWrap.classList.add('hidden'); empty.classList.add('hidden'); return; }
+  else { emptyBig.classList.add('hidden'); tableWrap.classList.remove('hidden'); }
+  const q = (document.getElementById('searchInput').value || '').toLowerCase().trim();
+  if (q) names = names.filter(n => n.toLowerCase().includes(q));
+  if (!names.length) { empty.classList.remove('hidden'); return; }
+  empty.classList.add('hidden');
+  const s = state.sort.balance;
+  names.sort((a,b) => {
+    let va, vb;
+    if (s.field === 'name') { va = a.toLowerCase(); vb = b.toLowerCase(); return s.dir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va); }
+    if (s.field === 'init') { va = map[a].init; vb = map[b].init; }
+    else if (s.field === 'ot') { va = map[a].ot; vb = map[b].ot; }
+    else if (s.field === 'to') { va = map[a].to; vb = map[b].to; }
+    else if (s.field === 'balance') { va = map[a].init + map[a].ot - map[a].to; vb = map[b].init + map[b].ot - map[b].to; }
+    else { va = 0; vb = 0; }
+    return s.dir === 'asc' ? va - vb : vb - va;
+  });
+  names.forEach(name => {
+    const d = map[name];
+    const bal = d.init + d.ot - d.to;
+    const badge = bal > 0
+      ? `<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700">+${bal} ч</span>`
+      : bal < 0
+      ? `<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-700"><i class="fa-solid fa-triangle-exclamation mr-1"></i>${bal} ч</span>`
+      : `<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700">${bal} ч</span>`;
+    const isOwn = matchesUser(name);
+    const actions = isManager()
+      ? `<div class="flex justify-end space-x-1 no-print">
+           <button onclick="event.stopPropagation(); openModalForEmployee('${escapeAttr(name)}')" class="px-2 py-1 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-600 text-xs rounded-lg" title="Добавить операцию"><i class="fa-solid fa-plus"></i></button>
+           <button onclick="event.stopPropagation(); editInitialBalance('${escapeAttr(name)}')" class="px-2 py-1 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-xs rounded-lg" title="Изменить баланс"><i class="fa-solid fa-pen"></i></button>
+           <button onclick="event.stopPropagation(); deleteEmployee('${escapeAttr(name)}')" class="px-2 py-1 bg-slate-100 hover:bg-rose-50 hover:text-rose-600 text-xs rounded-lg" title="Удалить сотрудника"><i class="fa-solid fa-trash"></i></button>
+         </div>`
+      : (isOwn
+        ? `<div class="flex justify-end space-x-1 no-print"><button onclick="event.stopPropagation(); openModalForEmployee('${escapeAttr(name)}')" class="px-2 py-1 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-600 text-xs rounded-lg" title="Добавить себе операцию"><i class="fa-solid fa-plus"></i></button></div>`
+        : '');
+    const tr = document.createElement('tr');
+    tr.className = 'hover:bg-slate-50 cursor-pointer' + (bal < 0 ? ' negative-row' : '');
+    tr.onclick = (e) => { if (!e.target.closest('button') && !e.target.closest('.name-click')) openEmployeeRecords(name); };
+    tr.title = 'Нажмите на строку, чтобы посмотреть записи';
+    tr.innerHTML = `
+      <td class="py-3 px-3 font-medium text-slate-900">
+        <div class="flex items-center space-x-2">
+          <div class="w-8 h-8 rounded-full ${avatarClass(name)} text-xs font-bold flex items-center justify-center">${getInitials(name)}</div>
+          <div>
+            <div class="name-click cursor-pointer hover:text-indigo-600 hover:underline" onclick="event.stopPropagation(); openAnalytics('${escapeAttr(name)}')" title="Нажмите на ФИО — откроется аналитика">${escapeHtml(name)}${isManager() ? '' : (isOwn ? ' <span class="text-[10px] text-indigo-500 font-normal">(вы)</span>' : '')}</div>
+            ${d.date !== '—' ? `<div class="text-[10px] text-slate-400">срез на ${formatDateRu(d.date)}</div>` : ''}
+          </div>
+        </div>
+      </td>
+      <td class="py-3 px-3 text-slate-700">${d.init} ч</td>
+      <td class="py-3 px-3 text-emerald-600 font-semibold">+${d.ot} ч</td>
+      <td class="py-3 px-3 text-rose-600 font-semibold">−${d.to} ч</td>
+      <td class="py-3 px-3">${badge}</td>
+      <td class="py-3 px-3">${actions}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function renderRecordsTable() {
+  const tbody = document.getElementById('recordsTableBody');
+  const empty = document.getElementById('emptyRecordsState');
+  const summary = document.getElementById('recordsSummary');
+  let list = getFilteredRecords();
+  const s = state.sort.records;
+  list.sort((a,b) => {
+    let va, vb;
+    if (s.field === 'type') { va = a.type; vb = b.type; }
+    else if (s.field === 'name') { va = a.employeeName.toLowerCase(); vb = b.employeeName.toLowerCase(); return s.dir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va); }
+    else if (s.field === 'date') { va = a.date; vb = b.date; return s.dir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va); }
+    else if (s.field === 'hours') { va = a.hours; vb = b.hours; }
+    else { va = 0; vb = 0; }
+    if (typeof va === 'string') return s.dir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+    return s.dir === 'asc' ? va - vb : vb - va;
+  });
+  const totalOt = list.filter(r => r.type === 'overtime').reduce((s, r) => s + r.hours, 0);
+  const totalTo = list.filter(r => r.type === 'timeoff').reduce((s, r) => s + r.hours, 0);
+  const mfVal = document.getElementById('monthFilter').value;
+  const periodText = mfVal ? `за ${formatMonthRu(mfVal)}` : 'за всё время';
+  summary.innerHTML = `Найдено: <b>${list.length}</b> записей ${periodText} · переработки <b class="text-emerald-600">+${totalOt} ч</b> · отгулы <b class="text-rose-600">−${totalTo} ч</b>`;
+  tbody.innerHTML = '';
+  if (!list.length) { empty.classList.remove('hidden'); return; }
+  empty.classList.add('hidden');
+  list.forEach(r => {
+    const isOt = r.type === 'overtime';
+    const badge = isOt
+      ? `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700">🟢 Переработка</span>`
+      : `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700">🔴 Отгул</span>`;
+    const pdfCell = r.pdfFile
+      ? `<button onclick="previewPdf('${r.id}')" class="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs rounded-lg border border-rose-200"><i class="fa-solid fa-file-pdf mr-1"></i>${escapeHtml(r.pdfName || 'PDF')}</button>`
+      : `<span class="text-xs text-slate-400 italic">Нет</span>`;
+    const canEdit = canEditRecord(r);
+    const actions = canEdit ? `
+      <div class="flex justify-end space-x-1 no-print">
+        <button onclick="duplicateRecord('${r.id}')" class="p-1.5 text-slate-400 hover:text-emerald-600 rounded-lg hover:bg-emerald-50" title="Дублировать"><i class="fa-solid fa-copy"></i></button>
+        <button onclick="editRecord('${r.id}')" class="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-indigo-50" title="Редактировать"><i class="fa-solid fa-pen"></i></button>
+        <button onclick="deleteRecord('${r.id}')" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50" title="Удалить"><i class="fa-solid fa-trash"></i></button>
+      </div>` : '<div class="text-[10px] text-slate-400 text-right">только просмотр</div>';
+    const tr = document.createElement('tr');
+    tr.className = 'hover:bg-slate-50';
+    tr.innerHTML = `
+      <td class="py-3 px-3">${badge}</td>
+      <td class="py-3 px-3 font-medium text-slate-900 cursor-pointer hover:text-indigo-600 hover:underline" onclick="openEmployeeRecords('${escapeAttr(r.employeeName)}')">${escapeHtml(r.employeeName)}</td>
+      <td class="py-3 px-3 text-slate-600">${formatDateRu(r.date)}</td>
+      <td class="py-3 px-3"><span class="px-2 py-0.5 rounded-full text-xs font-semibold ${isOt ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}">${isOt ? '+' : '−'}${r.hours} ч</span></td>
+      <td class="py-3 px-3 text-slate-600">${escapeHtml(r.reason || '—')}</td>
+      <td class="py-3 px-3">${pdfCell}</td>
+      <td class="py-3 px-3">${actions}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+async function duplicateRecord(id) {
+  const r = state.data.records.find(x => x.id === id); if (!r) return;
+  if (!canEditRecord(r)) { showToast('Можно дублировать только свои записи', 'error'); return; }
+  const copy = { id: Date.now().toString(), type: r.type, employeeName: r.employeeName, date: new Date().toISOString().slice(0,10), hours: r.hours, reason: r.reason, pdfName: r.pdfName, pdfFile: r.pdfFile };
+  state.data.records.push(copy);
+  await saveToServer('add_record', copy); renderApp(); showToast('Запись скопирована (дата — сегодня)');
+}
+
+function initCalendar() {
+  const ys = document.getElementById('calendarYearSelect');
+  const y = new Date().getFullYear();
+  for (let i = y - 2; i <= y + 3; i++) { const o = document.createElement('option'); o.value = i; o.textContent = i; ys.appendChild(o); }
+  ys.value = y;
+  document.getElementById('calendarMonthSelect').value = new Date().getMonth();
+}
+function onCalendarChange() { state.calendarDate = new Date(parseInt(document.getElementById('calendarYearSelect').value), parseInt(document.getElementById('calendarMonthSelect').value), 1); renderCalendar(); }
+function goToday() { const n = new Date(); state.calendarDate = new Date(n.getFullYear(), n.getMonth(), 1); document.getElementById('calendarYearSelect').value = n.getFullYear(); document.getElementById('calendarMonthSelect').value = n.getMonth(); renderCalendar(); }
+function renderCalendar() {
+  const grid = document.getElementById('calendarGrid'); if (!grid) return;
+  grid.innerHTML = '';
+  const y = state.calendarDate.getFullYear(), m = state.calendarDate.getMonth();
+  let first = new Date(y, m, 1).getDay(); first = first === 0 ? 6 : first - 1;
+  const days = new Date(y, m + 1, 0).getDate();
+  const todayStr = new Date().toISOString().slice(0,10);
+  for (let i = first; i > 0; i--) { const d = document.createElement('div'); d.className = 'bg-slate-50 min-h-[90px] p-2 text-slate-400 text-xs'; grid.appendChild(d); }
+  for (let day = 1; day <= days; day++) {
+    const dateStr = `${y}-${String(m+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    const recs = (state.data.records || []).filter(r => r.date === dateStr && matchesUser(r.employeeName));
+    const cell = document.createElement('div');
+    cell.className = 'bg-white min-h-[90px] p-2 flex flex-col';
+    cell.innerHTML = `<div class="text-xs font-semibold ${dateStr === todayStr ? 'bg-indigo-600 text-white w-6 h-6 rounded-full flex items-center justify-center' : 'text-slate-600'}">${day}</div>
+      <div class="mt-1 space-y-0.5 flex-1 overflow-y-auto">
+        ${recs.map(r => `<div class="text-[10px] px-1 py-0.5 rounded truncate cursor-pointer ${r.type==='overtime'?'bg-emerald-50 text-emerald-800':'bg-rose-50 text-rose-800'}" onclick="editRecord('${r.id}')" title="${escapeAttr(r.employeeName)}">${r.type==='overtime'?'+':'−'}${r.hours}ч ${escapeHtml(r.employeeName.split(' ')[0])}</div>`).join('')}
+      </div>`;
+    grid.appendChild(cell);
+  }
+}
+
+function openModal(type = 'overtime') {
+  if (!Object.keys(state.data.initialBalances || {}).length) { showToast('Сначала руководитель должен добавить сотрудников', 'error'); return; }
+  document.getElementById('recordModal').classList.remove('hidden');
+  document.getElementById('recordModal').classList.add('flex');
+  document.getElementById('modalTitle').textContent = type === 'overtime' ? 'Добавить переработку' : 'Добавить отгул';
+  document.getElementById('recordForm').reset();
+  document.getElementById('recordId').value = '';
+  document.getElementById('recordType').value = type;
+  document.getElementById('recordDate').value = new Date().toISOString().slice(0,10);
+  document.getElementById('fileNameDisplay').textContent = 'Нажмите для выбора PDF (до 20 МБ)';
+  state.currentUploadedFile = { name: null, file: null };
+  updateEmployeeDropdown();
+  const selectEl = document.getElementById('employeeName');
+  const hintEl = document.getElementById('employeeLockedHint');
+  if (!isManager()) {
+    const hasOwnOption = Array.from(selectEl.options).some(o => o.value === state.user.name);
+    if (hasOwnOption) selectEl.value = state.user.name;
+    selectEl.disabled = true; selectEl.classList.add('bg-slate-100', 'cursor-not-allowed'); hintEl.classList.remove('hidden');
+  } else {
+    selectEl.disabled = false; selectEl.classList.remove('bg-slate-100', 'cursor-not-allowed'); hintEl.classList.add('hidden');
+  }
+}
+function openModalForEmployee(name) {
+  if (!isManager() && !matchesUser(name)) { showToast('Можно добавлять записи только себе', 'error'); return; }
+  openModal('overtime');
+  if (isManager()) document.getElementById('employeeName').value = name;
+}
+function closeModal() { document.getElementById('recordModal').classList.add('hidden'); document.getElementById('recordModal').classList.remove('flex'); }
+async function handleFileSelect(e) {
+  const file = e.target.files[0]; if (!file) return;
+  if (file.type !== 'application/pdf') { showToast('Только PDF', 'error'); return; }
+  if (file.size > 20 * 1024 * 1024) { showToast('Файл больше 20 МБ', 'error'); return; }
+  document.getElementById('fileNameDisplay').textContent = 'Загрузка…';
+  const res = await API.upload(file);
+  if (!res.ok) { showToast('Ошибка загрузки', 'error'); document.getElementById('fileNameDisplay').textContent = 'PDF'; return; }
+  state.currentUploadedFile = { name: res.pdfName, file: res.pdfFile };
+  document.getElementById('fileNameDisplay').textContent = res.pdfName;
+}
+async function saveRecord(e) {
+  e.preventDefault();
+  const id = document.getElementById('recordId').value;
+  const targetEmployee = isManager() ? document.getElementById('employeeName').value : state.user.name;
+  const rec = {
+    id: id || Date.now().toString(),
+    type: document.getElementById('recordType').value,
+    employeeName: targetEmployee,
+    date: document.getElementById('recordDate').value,
+    hours: parseFloat(document.getElementById('recordHours').value),
+    reason: document.getElementById('recordReason').value.trim(),
+    pdfName: state.currentUploadedFile.name,
+    pdfFile: state.currentUploadedFile.file
+  };
+  if (id) {
+    const i = state.data.records.findIndex(r => r.id === id);
+    if (i !== -1 && !canEditRecord(state.data.records[i])) { showToast('Можно редактировать только свои записи', 'error'); return; }
+    if (i !== -1) {
+      if (!isManager()) rec.employeeName = state.data.records[i].employeeName;
+      state.data.records[i] = rec;
+    }
+    await saveToServer('edit_record', rec);
+  } else {
+    state.data.records.push(rec);
+    await saveToServer('add_record', rec);
+  }
+  closeModal(); renderApp(); showToast('Сохранено');
+}
+function editRecord(id) {
+  const r = state.data.records.find(x => x.id === id); if (!r) return;
+  if (!canEditRecord(r)) { showToast('Можно редактировать только свои записи', 'error'); return; }
+  document.getElementById('recordModal').classList.remove('hidden');
+  document.getElementById('recordModal').classList.add('flex');
+  document.getElementById('modalTitle').textContent = 'Редактировать запись';
+  document.getElementById('recordId').value = r.id;
+  document.getElementById('recordType').value = r.type;
+  document.getElementById('recordDate').value = r.date;
+  document.getElementById('recordHours').value = r.hours;
+  document.getElementById('recordReason').value = r.reason || '';
+  updateEmployeeDropdown();
+  document.getElementById('employeeName').value = r.employeeName;
+  const selectEl = document.getElementById('employeeName');
+  const hintEl = document.getElementById('employeeLockedHint');
+  if (!isManager()) { selectEl.disabled = true; selectEl.classList.add('bg-slate-100', 'cursor-not-allowed'); hintEl.classList.remove('hidden'); }
+  else { selectEl.disabled = false; selectEl.classList.remove('bg-slate-100', 'cursor-not-allowed'); hintEl.classList.add('hidden'); }
+  state.currentUploadedFile = { name: r.pdfName || null, file: r.pdfFile || null };
+  document.getElementById('fileNameDisplay').textContent = r.pdfName || 'Нажмите для выбора PDF';
+}
+async function deleteRecord(id) {
+  const r = state.data.records.find(x => x.id === id); if (!r) return;
+  if (!canEditRecord(r)) { showToast('Можно удалять только свои записи', 'error'); return; }
+  if (!confirm(`Переместить запись «${r.employeeName}» (${r.hours} ч) в корзину?`)) return;
+  pushToTrash(r);
+  state.data.records = state.data.records.filter(x => x.id !== id);
+  await saveToServer('delete_record', r); renderApp(); showToast('Запись в корзине');
+}
+
+function openInitialBalanceModal() {
+  if (!isManager()) { showToast('Только руководитель может управлять сотрудниками', 'error'); return; }
+  document.getElementById('initialBalanceModal').classList.remove('hidden');
+  document.getElementById('initialBalanceModal').classList.add('flex');
+  document.getElementById('initEmployeeName').value = '';
+  document.getElementById('initHours').value = 0;
+  document.getElementById('initCutoffDate').value = '2026-09-01';
+  setTimeout(() => document.getElementById('initEmployeeName').focus(), 100);
+}
+function closeInitialBalanceModal() { document.getElementById('initialBalanceModal').classList.add('hidden'); document.getElementById('initialBalanceModal').classList.remove('flex'); }
+function editInitialBalance(name) {
+  if (!isManager()) return;
+  const cur = state.data.initialBalances[name] || { hours: 0, date: '2026-09-01' };
+  openInitialBalanceModal();
+  document.getElementById('initEmployeeName').value = name;
+  document.getElementById('initHours').value = cur.hours;
+  document.getElementById('initCutoffDate').value = cur.date;
+}
+async function saveInitialBalance(e) {
+  e.preventDefault();
+  if (!isManager()) return;
+  const name = document.getElementById('initEmployeeName').value.trim();
+  const hours = parseFloat(document.getElementById('initHours').value);
+  const date = document.getElementById('initCutoffDate').value;
+  if (!name || isNaN(hours)) return;
+  const isNew = !state.data.initialBalances[name];
+  state.data.initialBalances[name] = { hours, date };
+  await saveToServer(isNew ? 'add_employee' : 'edit_employee', { employeeName: name });
+  closeInitialBalanceModal(); renderApp(); populateLoginList(); showToast('Сохранено');
+}
+async function deleteEmployee(name) {
+  if (!isManager()) return;
+  const recs = (state.data.records || []).filter(r => r.employeeName === name);
+  const msg = recs.length ? `Удалить сотрудника «${name}»?\n\nУ него ${recs.length} записей — все попадут в корзину.` : `Удалить сотрудника «${name}»?`;
+  if (!confirm(msg)) return;
+  recs.forEach(r => pushToTrash(r));
+  state.data.records = state.data.records.filter(r => r.employeeName !== name);
+  delete state.data.initialBalances[name];
+  await saveToServer('delete_employee', { employeeName: name });
+  renderApp(); populateLoginList(); showToast('Сотрудник удалён');
+}
+
+function previewPdf(id) {
+  const r = state.data.records.find(x => x.id === id); if (!r) return;
+  document.getElementById('pdfModal').classList.remove('hidden');
+  document.getElementById('pdfModal').classList.add('flex');
+  document.getElementById('pdfModalTitle').textContent = `${r.employeeName} — ${formatDateRu(r.date)}`;
+  const url = r.pdfFile ? '/uploads/' + r.pdfFile : '';
+  document.getElementById('pdfViewerFrame').src = url;
+  const dl = document.getElementById('downloadPdfBtn');
+  dl.href = url; dl.download = r.pdfName || 'zayavlenie.pdf';
+}
+function closePdfModal() { document.getElementById('pdfModal').classList.add('hidden'); document.getElementById('pdfModal').classList.remove('flex'); document.getElementById('pdfViewerFrame').src = ''; }
+
+/* ============================================================
+   СПИСОК ЗАПИСЕЙ СОТРУДНИКА (клик по строке)
+   ============================================================ */
+let currentErName = null;
+let currentErFilter = 'all';
+
+function openEmployeeRecords(name) {
+  currentErName = name;
+  currentErFilter = 'all';
+  document.getElementById('erAvatar').textContent = getInitials(name);
+  document.getElementById('erAvatar').className = 'w-11 h-11 rounded-full text-sm font-bold flex items-center justify-center flex-shrink-0 ' + avatarClass(name);
+  document.getElementById('erName').textContent = name;
+  const canAdd = isManager() || matchesUser(name);
+  document.getElementById('erAddBtn').classList.toggle('role-hidden', !canAdd);
+  setErFilter('all');
+  renderEmployeeRecords();
+  document.getElementById('employeeRecordsModal').classList.remove('hidden');
+  document.getElementById('employeeRecordsModal').classList.add('flex');
+}
+function closeEmployeeRecords() {
+  document.getElementById('employeeRecordsModal').classList.add('hidden');
+  document.getElementById('employeeRecordsModal').classList.remove('flex');
+  currentErName = null;
+}
+function setErFilter(f) {
+  currentErFilter = f;
+  const btns = [{ id: 'erTabAll', key: 'all' }, { id: 'erTabOt', key: 'overtime' }, { id: 'erTabTo', key: 'timeoff' }];
+  btns.forEach(b => {
+    const el = document.getElementById(b.id);
+    if (b.key === f) el.className = 'px-3 py-1.5 rounded-md text-xs font-semibold transition-all bg-white shadow-sm text-slate-900';
+    else el.className = 'px-3 py-1.5 rounded-md text-xs font-semibold transition-all text-slate-600 hover:text-slate-900';
+  });
+  renderEmployeeRecords();
+}
+function renderEmployeeRecords() {
+  if (!currentErName) return;
+  const name = currentErName;
+  const init = (state.data.initialBalances[name] || {}).hours || 0;
+  const allRecs = (state.data.records || []).filter(r => r.employeeName === name);
+  const ot = allRecs.filter(r => r.type === 'overtime').reduce((s, r) => s + r.hours, 0);
+  const to = allRecs.filter(r => r.type === 'timeoff').reduce((s, r) => s + r.hours, 0);
+  const bal = init + ot - to;
+  document.getElementById('erStatInit').textContent = init + ' ч';
+  document.getElementById('erStatOt').textContent = '+' + ot + ' ч';
+  document.getElementById('erStatTo').textContent = '−' + to + ' ч';
+  const balEl = document.getElementById('erStatBal');
+  balEl.textContent = (bal > 0 ? '+' : '') + bal + ' ч';
+  balEl.className = 'text-base font-bold mt-0.5 ' + (bal > 0 ? 'text-indigo-700' : bal < 0 ? 'text-rose-700' : 'text-slate-800');
+  let list = allRecs.slice();
+  if (currentErFilter !== 'all') list = list.filter(r => r.type === currentErFilter);
+  list.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const listEl = document.getElementById('erList');
+  const emptyEl = document.getElementById('erEmpty');
+  const countEl = document.getElementById('erCount');
+  countEl.textContent = `Всего: ${list.length}`;
+  if (!list.length) { listEl.innerHTML = ''; emptyEl.classList.remove('hidden'); return; }
+  emptyEl.classList.add('hidden');
+  listEl.innerHTML = list.map(r => {
+    const isOt = r.type === 'overtime';
+    const canEdit = canEditRecord(r);
+    const pdfBlock = r.pdfFile
+      ? `<button onclick="previewPdf('${r.id}')" class="inline-flex items-center px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 text-[11px] font-medium rounded-lg border border-rose-200 whitespace-nowrap"><i class="fa-solid fa-file-pdf mr-1.5 text-rose-500"></i> ${escapeHtml(r.pdfName || 'Заявление.pdf')}</button>`
+      : `<span class="text-[11px] text-slate-400 italic"><i class="fa-solid fa-paperclip mr-1 opacity-50"></i>без файла</span>`;
+    const actions = canEdit
+      ? `<div class="flex items-center gap-1">
+           <button onclick="closeEmployeeRecords(); editRecord('${r.id}');" class="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-indigo-50" title="Редактировать"><i class="fa-solid fa-pen text-xs"></i></button>
+           <button onclick="deleteRecord('${r.id}'); renderEmployeeRecords();" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50" title="Удалить"><i class="fa-solid fa-trash text-xs"></i></button>
+         </div>`
+      : '';
+    return `
+      <div class="flex items-start gap-3 p-3 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all">
+        <div class="w-10 h-10 rounded-xl ${isOt ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'} flex items-center justify-center flex-shrink-0">
+          <i class="fa-solid ${isOt ? 'fa-clock-rotate-left' : 'fa-person-walking-dashed-line-arrow-right'}"></i>
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="text-[10px] font-bold uppercase tracking-wider ${isOt ? 'text-emerald-700' : 'text-rose-700'}">${isOt ? 'Переработка' : 'Отгул'}</span>
+            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${isOt ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}">${isOt ? '+' : '−'}${r.hours} ч</span>
+            <span class="text-[11px] text-slate-500"><i class="fa-regular fa-calendar mr-1"></i>${formatDateRu(r.date)}</span>
+          </div>
+          ${r.reason ? `<div class="text-xs text-slate-600 mt-1.5 italic">«${escapeHtml(r.reason)}»</div>` : ''}
+          <div class="mt-2 flex items-center justify-between gap-2 flex-wrap">
+            ${pdfBlock}
+            <div class="flex items-center gap-1">${actions}</div>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function openAnalytics(name) {
+  state.analyticsEmployee = name;
+  document.getElementById('analyticsModalTitle').textContent = name;
+  document.getElementById('analyticsModal').classList.remove('hidden');
+  document.getElementById('analyticsModal').classList.add('flex');
+  renderAnalytics();
+}
+function closeAnalyticsModal() {
+  document.getElementById('analyticsModal').classList.add('hidden');
+  document.getElementById('analyticsModal').classList.remove('flex');
+  if (state.chart) { state.chart.destroy(); state.chart = null; }
+}
+function renderAnalytics() {
+  const name = state.analyticsEmployee; if (!name) return;
+  const recs = state.data.records.filter(r => r.employeeName === name).sort((a,b) => new Date(a.date) - new Date(b.date));
+  const map = {};
+  recs.forEach(r => {
+    if (!map[r.date]) map[r.date] = { ot: 0, to: 0 };
+    if (r.type === 'overtime') map[r.date].ot += parseFloat(r.hours||0);
+    else map[r.date].to += parseFloat(r.hours||0);
+  });
+  const dates = Object.keys(map).sort();
+  const otData = dates.map(d => map[d].ot);
+  const toData = dates.map(d => map[d].to);
+  document.getElementById('analyticsStatOvertime').textContent = '+' + otData.reduce((a,b)=>a+b,0) + ' ч';
+  document.getElementById('analyticsStatTimeoff').textContent = '−' + toData.reduce((a,b)=>a+b,0) + ' ч';
+  document.getElementById('analyticsStatNet').textContent = (otData.reduce((a,b)=>a+b,0) - toData.reduce((a,b)=>a+b,0)) + ' ч';
+  if (state.chart) state.chart.destroy();
+  const ctx = document.getElementById('employeeAnalyticsChart').getContext('2d');
+  state.chart = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: dates.map(formatDateRu), datasets: [
+      { label: 'Переработки', data: otData, backgroundColor: 'rgba(16,185,129,.8)', borderRadius: 6 },
+      { label: 'Отгулы', data: toData, backgroundColor: 'rgba(244,63,94,.8)', borderRadius: 6 }
+    ]},
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+  });
+}
+
+function exportToExcel() {
+  try {
+    const wb = XLSX.utils.book_new();
+    const all = new Set([...Object.keys(state.data.initialBalances || {}), ...state.data.records.map(r => r.employeeName)]);
+    const rows = Array.from(all).filter(matchesUser).sort().map(n => {
+      const init = (state.data.initialBalances[n] || {}).hours || 0;
+      const ot = state.data.records.filter(r => r.employeeName === n && r.type === 'overtime').reduce((s,r) => s + r.hours, 0);
+      const to = state.data.records.filter(r => r.employeeName === n && r.type === 'timeoff').reduce((s,r) => s + r.hours, 0);
+      return { 'ФИО': n, 'Начальный баланс': init, 'Переработки (+)': ot, 'Отгулы (−)': to, 'Текущий баланс': init + ot - to };
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Баланс');
+    const recs = getFilteredRecords().map((r,i) => ({
+      '№': i + 1, 'Тип': r.type === 'overtime' ? 'Переработка' : 'Отгул', 'ФИО': r.employeeName,
+      'Дата': formatDateRu(r.date), 'Часы': r.hours, 'Основание': r.reason || '—', 'PDF': r.pdfName || '—'
+    }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(recs), 'Журнал');
+    XLSX.writeFile(wb, `Vedomost_${new Date().toISOString().slice(0,10)}.xlsx`);
+    showToast('Excel готов');
+  } catch(e) { showToast('Ошибка Excel', 'error'); }
+}
+function printReport() {
+  const now = new Date();
+  document.getElementById('printSubtitle').textContent = `Сформировано: ${now.toLocaleDateString('ru-RU')} ${now.toLocaleTimeString('ru-RU')}`;
+  window.print();
+}
+
+async function startPolling() {
+  setInterval(async () => {
+    if (!document.getElementById('recordModal').classList.contains('hidden')) return;
+    if (!document.getElementById('initialBalanceModal').classList.contains('hidden')) return;
+    if (!document.getElementById('employeeRecordsModal').classList.contains('hidden')) return;
+    const p = await API.ping();
+    if (p.ok && p.version && p.version !== state.lastVersion) {
+      const prevIds = new Set((state.data.records || []).map(r => r.id));
+      await loadFromServer();
+      renderApp();
+      if (!state.user) return;
+      const newRecs = state.data.records.filter(r => !prevIds.has(r.id));
+      newRecs.forEach(r => { if (matchesUser(r.employeeName)) showToast(`📥 ${r.type === 'overtime' ? 'Переработка' : 'Отгул'}: ${r.employeeName} (${r.hours} ч, ${formatDateRu(r.date)})`, 'info'); });
+    }
+  }, 5000);
+}
+
+document.addEventListener('keydown', e => {
+  if (e.ctrlKey && e.key === 'k') { e.preventDefault(); document.getElementById('searchInput').focus(); document.getElementById('searchInput').select(); }
+  if (e.ctrlKey && e.key === 'n' && isManager()) { e.preventDefault(); openInitialBalanceModal(); }
+  if (e.ctrlKey && e.key === 'o') { e.preventDefault(); openModal('overtime'); }
+  if (e.ctrlKey && e.key === 't') { e.preventDefault(); openModal('timeoff'); }
+  if (e.key === 'Escape') {
+    closeModal(); closeInitialBalanceModal(); closePdfModal(); closeAnalyticsModal(); closeEmployeeRecords();
+  }
+});
+
+function formatDateRu(d) { if (!d || d === '—') return d; const p = d.split('-'); return p.length === 3 ? `${p[2]}.${p[1]}.${p[0]}` : d; }
+function formatMonthRu(ym) {
+  if (!ym) return '';
+  const [y, m] = ym.split('-');
+  const names = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+  return names[parseInt(m)-1] + ' ' + y;
+}
+function getInitials(n) { if (!n) return 'С'; const p = n.trim().split(' '); return p.length >= 2 ? (p[0][0]+p[1][0]).toUpperCase() : n.slice(0,2).toUpperCase(); }
+function escapeHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]); }
+function escapeAttr(s) { return escapeHtml(s); }
+function showToast(msg, type = 'success') {
+  const t = document.getElementById('toast');
+  const i = document.getElementById('toastIcon');
+  document.getElementById('toastMessage').textContent = msg;
+  i.className = type === 'error' ? 'fa-solid fa-circle-exclamation text-rose-400' : 'fa-solid fa-circle-check text-emerald-400';
+  t.classList.remove('translate-y-20', 'opacity-0');
+  setTimeout(() => t.classList.add('translate-y-20', 'opacity-0'), 3500);
+}
+
+window.addEventListener('DOMContentLoaded', async () => {
+  initCalendar();
+  loadUser();
+  await loadFromServer();
+  loadUiPrefs();
+  populateLoginList();
+  if (!state.user) showLogin();
+  else { applyUserUI(); renderApp(); }
+  startPolling();
+});
+</script>
+</body>
+</html>

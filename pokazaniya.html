@@ -1,0 +1,977 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Реестр проверок показаний — ЕЦП</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  body { font-family: 'Inter', sans-serif; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+  .rule-grid { display: grid; grid-template-columns: 1.4fr 1.4fr 60px 1fr 44px; gap: 14px; align-items: start; padding: 12px 16px; transition: background .15s; }
+  .rule-grid:hover { background: #f8fafc; }
+  .rule-grid.hidden { display: none; }
+  .group-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .3s cubic-bezier(.4,0,.2,1); }
+  .group.open .group-body { grid-template-rows: 1fr; }
+  .group-body > .inner { overflow: hidden; }
+  .group-body .inner > * { border-top: 1px solid #e2e8f0; }
+  .editable { cursor: text; border-radius: 6px; padding: 4px 8px; margin: -4px -8px; outline: none; min-height: 22px; transition: background .15s, box-shadow .15s; word-wrap: break-word; }
+  .editable:hover { background: #f1f5f9; }
+  .editable:focus { background: #eef2ff; box-shadow: 0 0 0 2px #6366f1; }
+  .editable.saved::after { content: '✓'; position: absolute; right: 4px; top: 4px; color: #10b981; font-size: 11px; font-weight: 700; animation: savedFade 1.4s ease forwards; }
+  @keyframes savedFade { 0% { opacity: 1; } 70% { opacity: 1; } 100% { opacity: 0; } }
+  body.viewer .editable { cursor: default; padding: 0; margin: 0; }
+  body.viewer .editable:hover { background: transparent; }
+  body.viewer .editor-only { display: none !important; }
+  .val { display: inline-block; padding: 1px 7px; margin: 0 1px; border-radius: 6px; font-weight: 700; font-size: 12.5px; background: #fef3c7; color: #92400e; border: 1px solid #fde68a; white-space: nowrap; }
+  mark { background: #fde68a; color: #78350f; padding: 1px 2px; border-radius: 3px; }
+  .check-btn { width: 30px; height: 30px; border-radius: 9px; border: 1px solid #cbd5e1; background: #f8fafc; color: #cbd5e1; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: all .15s; }
+  .check-btn:hover { transform: scale(1.08); }
+  .check-btn:disabled { cursor: default; opacity: .85; }
+  .check-btn:disabled:hover { transform: none; }
+  .check-btn.on { background: #4f46e5; border-color: #4338ca; color: #fff; box-shadow: 0 2px 6px rgba(79,70,229,.3); }
+  .check-btn svg { width: 14px; height: 14px; }
+  .dev-toggle { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 10px; font-size: 11px; font-weight: 600; cursor: pointer; border: 1px solid transparent; transition: all .15s; white-space: nowrap; }
+  .dev-toggle.yes { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
+  .dev-toggle.no { background: #f1f5f9; color: #64748b; border-color: #e2e8f0; }
+  .dev-toggle:hover { transform: translateY(-1px); }
+  body.viewer .dev-toggle { cursor: default; }
+  body.viewer .dev-toggle:hover { transform: none; }
+  .filial-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .tab-close { margin-left: 4px; width: 18px; height: 18px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; line-height: 1; color: #94a3b8; opacity: 0; transition: all .15s; cursor: pointer; border: none; background: transparent; }
+  .tab-wrap:hover .tab-close { opacity: 1; }
+  .tab-close:hover { background: #e11d48; color: #fff; }
+  @media (max-width: 900px) {
+    .rule-grid { grid-template-columns: 1fr 1fr 60px; }
+    .rule-grid > div:nth-child(4) { grid-column: span 2; }
+    .rule-grid > div:nth-child(5) { grid-column: 3; grid-row: 1; }
+  }
+  @media (max-width: 640px) {
+    .rule-grid { grid-template-columns: 1fr; gap: 10px; }
+    .rule-grid > div { grid-column: 1 !important; grid-row: auto !important; }
+    .rule-grid > div:nth-child(5) { justify-content: flex-start; }
+  }
+  @media print {
+    @page { size: A4 landscape; margin: 10mm; }
+    body { background: #fff !important; }
+    .no-print, header, .stats-row, .tabs-row, .filters-row, button { display: none !important; }
+    .group { page-break-inside: avoid; box-shadow: none !important; border: 1px solid #cbd5e1 !important; }
+    .group-body { grid-template-rows: 1fr !important; }
+    .rule-grid { grid-template-columns: 1.4fr 1.4fr 40px 1fr !important; padding: 5px 10px !important; gap: 8px !important; font-size: 9.5px !important; }
+    .rule-grid.hidden { display: grid !important; }
+    .group.hidden { display: block !important; }
+    .editable { background: transparent !important; padding: 0 !important; margin: 0 !important; box-shadow: none !important; }
+    .val { background: transparent !important; color: #000 !important; border: 1px solid #94a3b8 !important; padding: 0 4px !important; }
+    mark { background: transparent !important; color: inherit !important; }
+  }
+</style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+<div id="progress" class="fixed top-0 left-0 h-[3px] bg-indigo-600 z-[100] transition-all" style="width:0%"></div>
+
+<!-- ШАПКА -->
+<header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm no-print">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+    <div class="flex items-center space-x-3 min-w-0">
+      <div class="bg-indigo-600 text-white p-2.5 rounded-xl shadow-md flex items-center justify-center flex-shrink-0">
+        <i class="fa-solid fa-clipboard-check text-lg"></i>
+      </div>
+      <div class="min-w-0">
+        <h1 class="text-base sm:text-lg font-bold text-slate-900 tracking-tight truncate">Реестр проверок показаний</h1>
+        <p class="text-xs text-slate-500 hidden sm:block truncate">
+          <span class="inline-flex items-center"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block mr-1"></span> ЕЦП · <span id="activeFilialName">Кировский филиал</span></span>
+        </p>
+      </div>
+    </div>
+    <div class="flex items-center space-x-2 flex-shrink-0">
+      <div id="modeBadge" class="hidden md:inline-flex items-center space-x-2 px-3 py-1.5 bg-slate-100 rounded-xl">
+        <span id="modeDot" class="w-1.5 h-1.5 rounded-full bg-slate-400 inline-block"></span>
+        <span id="modeText" class="text-xs font-semibold text-slate-700">Режим просмотра</span>
+      </div>
+      <button onclick="openExport()" class="hidden md:inline-flex items-center px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-xl">
+        <i class="fa-solid fa-download mr-1.5 text-indigo-600"></i> Экспорт
+      </button>
+      <button onclick="window.print()" class="hidden md:inline-flex items-center px-3 py-2 bg-slate-700 hover:bg-slate-800 text-white text-xs font-medium rounded-xl">
+        <i class="fa-solid fa-print mr-1.5"></i> Печать
+      </button>
+      <button onclick="toggleTheme()" id="themeBtn" class="w-9 h-9 inline-flex items-center justify-center bg-slate-100 hover:bg-slate-200 rounded-xl" title="Тема">
+        <i class="fa-solid fa-moon text-slate-600 text-sm"></i>
+      </button>
+      <button onclick="toggleKbd()" class="hidden md:inline-flex w-9 h-9 items-center justify-center bg-slate-100 hover:bg-slate-200 rounded-xl" title="Горячие клавиши">
+        <i class="fa-solid fa-keyboard text-slate-600 text-sm"></i>
+      </button>
+      <button onclick="toggleEditor()" id="lockBtn" class="inline-flex items-center px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-xl shadow-sm">
+        <i class="fa-solid fa-lock mr-1.5"></i> Войти
+      </button>
+    </div>
+  </div>
+</header>
+
+<main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 stats-row" id="statsRow"></div>
+
+  <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+    <div class="border-b border-slate-200">
+      <!-- Строка 1: вкладки -->
+      <div class="px-3 sm:px-4 pt-3 pb-2">
+        <div id="tabs" class="flex flex-wrap bg-slate-100 p-1 rounded-xl gap-1 tabs-row"></div>
+      </div>
+      <!-- Строка 2: фильтры -->
+      <div class="px-3 sm:px-4 pb-3 pt-3 flex flex-wrap items-center gap-2 filters-row border-t border-slate-100">
+        <input type="text" id="searchInput" oninput="applyFilters()" placeholder="Поиск… (Ctrl+K)" class="flex-1 min-w-[180px] px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        <select id="filterType" onchange="applyFilters()" class="py-2 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm">
+          <option value="">Все типы проверок</option>
+          <option value="nebalans">Небаланс масс</option>
+          <option value="dt">dT меньше 3°C</option>
+          <option value="dv">dV отрицательная</option>
+          <option value="vnr">Досчёты по ВНР</option>
+          <option value="pu">Особенности ПУ</option>
+          <option value="vnr24">ВНР свыше 24 часов</option>
+          <option value="manual">Ручной ввод</option>
+          <option value="correct">Корректировка</option>
+          <option value="acts">Акты о допуске</option>
+          <option value="opros">Отсутствие опроса</option>
+          <option value="brak">Забракованные</option>
+          <option value="co">ЦО в летний период</option>
+          <option value="check">Проверка перед загрузкой</option>
+          <option value="norm">Норматив отопления</option>
+          <option value="holiday">Доп. выходной</option>
+        </select>
+        <select id="filterDev" onchange="applyFilters()" class="py-2 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm">
+          <option value="">Все группы</option>
+          <option value="yes">Заявлено на доработку</option>
+          <option value="no">Без доработок</option>
+        </select>
+        <button onclick="openModalFilial()" class="editor-only px-3 py-2 bg-violet-600 hover:bg-violet-700 text-white text-xs font-medium rounded-xl" title="Ctrl+Shift+F">
+          <i class="fa-solid fa-building mr-1"></i> Филиал
+        </button>
+        <button onclick="openModalGroup()" class="editor-only px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-xl" title="Ctrl+G">
+          <i class="fa-solid fa-plus mr-1"></i> Группа
+        </button>
+      </div>
+    </div>
+
+    <div id="content" class="p-4 sm:p-6 space-y-4"></div>
+  </div>
+
+</main>
+
+<!-- МОДАЛКА ВВОДА -->
+<div id="modalInput" class="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm hidden items-center justify-center p-4">
+  <div class="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden">
+    <div class="px-5 py-3 border-b flex items-center justify-between bg-slate-50">
+      <h3 id="modalTitle" class="text-base font-bold">Добавить</h3>
+      <button onclick="closeModalInput()" class="p-1.5 hover:bg-slate-200 rounded-lg"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="p-5 space-y-3">
+      <div>
+        <label class="block text-xs font-semibold text-slate-600 mb-1" id="modalLabel">Название</label>
+        <input type="text" id="modalField" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white">
+      </div>
+    </div>
+    <div class="px-5 py-3 border-t flex justify-end space-x-2 bg-slate-50">
+      <button onclick="closeModalInput()" class="px-4 py-2 bg-white border border-slate-200 text-sm rounded-xl hover:bg-slate-100">Отмена</button>
+      <button id="modalOkBtn" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-xl">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- МОДАЛКА НОВОГО ФИЛИАЛА -->
+<div id="modalFilial" class="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm hidden items-center justify-center p-4">
+  <div class="bg-white rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden">
+    <div class="px-5 py-3 border-b flex items-center justify-between bg-slate-50">
+      <div class="flex items-center space-x-2">
+        <div class="w-9 h-9 rounded-xl bg-violet-100 text-violet-600 flex items-center justify-center"><i class="fa-solid fa-building"></i></div>
+        <h3 class="text-base font-bold">Новый филиал</h3>
+      </div>
+      <button onclick="closeModalFilial()" class="p-1.5 hover:bg-slate-200 rounded-lg"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="p-5 space-y-4">
+      <div>
+        <label class="block text-xs font-semibold text-slate-600 mb-1">Название филиала *</label>
+        <input type="text" id="newFilialName" placeholder="Например: Самарский филиал" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white">
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-slate-600 mb-1">Копировать правила из филиала</label>
+        <select id="copyFromFilial" onchange="onCopySourceChange()" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          <option value="">— Не копировать (пустой филиал) —</option>
+        </select>
+        <div id="copyPreview" class="hidden mt-2 px-3 py-2 bg-indigo-50 border border-indigo-200 rounded-lg text-xs text-indigo-700">
+          <i class="fa-solid fa-circle-info mr-1"></i> Будет скопировано: <b id="copyGroupsCount">0</b> групп, <b id="copyRulesCount">0</b> правил
+        </div>
+        <p class="text-[10px] text-slate-400 mt-1">Все группы и правила копируются с новыми id.</p>
+      </div>
+    </div>
+    <div class="px-5 py-3 border-t flex justify-end space-x-2 bg-slate-50">
+      <button onclick="closeModalFilial()" class="px-4 py-2 bg-white border border-slate-200 text-sm rounded-xl hover:bg-slate-100">Отмена</button>
+      <button onclick="createFilial()" class="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white text-sm rounded-xl"><i class="fa-solid fa-plus mr-1"></i> Создать филиал</button>
+    </div>
+  </div>
+</div>
+
+<!-- МОДАЛКА ПОДТВЕРЖДЕНИЯ -->
+<div id="modalConfirm" class="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm hidden items-center justify-center p-4">
+  <div class="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden">
+    <div class="px-5 py-4 flex items-start space-x-3">
+      <div class="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center flex-shrink-0"><i class="fa-solid fa-triangle-exclamation"></i></div>
+      <div class="flex-1">
+        <h3 id="confirmTitle" class="text-base font-bold text-slate-900">Удалить?</h3>
+        <p id="confirmSubtitle" class="text-xs text-slate-500 mt-1">Действие нельзя отменить</p>
+      </div>
+    </div>
+    <div class="px-5 py-3 border-t flex justify-end space-x-2 bg-slate-50">
+      <button onclick="closeConfirm()" class="px-4 py-2 bg-white border border-slate-200 text-sm rounded-xl hover:bg-slate-100">Отмена</button>
+      <button id="confirmOkBtn" class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-sm rounded-xl">Удалить</button>
+    </div>
+  </div>
+</div>
+
+<!-- МОДАЛКА ПАРОЛЯ -->
+<div id="modalPassword" class="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm hidden items-center justify-center p-4">
+  <div class="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden">
+    <div class="px-5 py-3 border-b flex items-center justify-between bg-slate-50">
+      <h3 class="text-base font-bold">Режим редактора</h3>
+      <button onclick="closePassword()" class="p-1.5 hover:bg-slate-200 rounded-lg"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="p-5 space-y-3">
+      <p class="text-xs text-slate-500">Введите пароль, чтобы получить возможность редактировать правила.</p>
+      <input type="password" id="passwordField" onkeydown="if(event.key==='Enter')checkPassword()" placeholder="••••" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white">
+      <p id="passwordError" class="hidden text-xs text-rose-500"></p>
+    </div>
+    <div class="px-5 py-3 border-t flex justify-end space-x-2 bg-slate-50">
+      <button onclick="closePassword()" class="px-4 py-2 bg-white border border-slate-200 text-sm rounded-xl hover:bg-slate-100">Отмена</button>
+      <button onclick="checkPassword()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-xl">Войти</button>
+    </div>
+  </div>
+</div>
+
+<!-- МОДАЛКА ЭКСПОРТА -->
+<div id="modalExport" class="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm hidden items-center justify-center p-4">
+  <div class="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden">
+    <div class="px-5 py-3 border-b flex items-center justify-between bg-slate-50">
+      <h3 class="text-base font-bold">Экспорт данных</h3>
+      <button onclick="closeExport()" class="p-1.5 hover:bg-slate-200 rounded-lg"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="p-3 space-y-1">
+      <button onclick="exportCSV('current')" class="w-full flex items-center justify-between px-3 py-2.5 hover:bg-slate-100 rounded-xl text-left">
+        <span class="flex items-center text-sm"><i class="fa-solid fa-file-csv text-emerald-600 w-5 mr-2"></i> CSV — текущий филиал</span>
+        <i class="fa-solid fa-chevron-right text-slate-300 text-xs"></i>
+      </button>
+      <button onclick="exportCSV('all')" class="w-full flex items-center justify-between px-3 py-2.5 hover:bg-slate-100 rounded-xl text-left">
+        <span class="flex items-center text-sm"><i class="fa-solid fa-file-csv text-emerald-600 w-5 mr-2"></i> CSV — все филиалы</span>
+        <i class="fa-solid fa-chevron-right text-slate-300 text-xs"></i>
+      </button>
+      <button onclick="exportJSON()" class="w-full flex items-center justify-between px-3 py-2.5 hover:bg-slate-100 rounded-xl text-left">
+        <span class="flex items-center text-sm"><i class="fa-solid fa-file-code text-indigo-600 w-5 mr-2"></i> Резервная копия (JSON)</span>
+        <i class="fa-solid fa-chevron-right text-slate-300 text-xs"></i>
+      </button>
+      <button onclick="document.getElementById('importFile').click()" class="editor-only w-full flex items-center justify-between px-3 py-2.5 hover:bg-slate-100 rounded-xl text-left">
+        <span class="flex items-center text-sm"><i class="fa-solid fa-upload text-amber-600 w-5 mr-2"></i> Импорт из JSON</span>
+        <i class="fa-solid fa-chevron-right text-slate-300 text-xs"></i>
+      </button>
+      <input type="file" id="importFile" accept=".json" class="hidden" onchange="importJSON(event)">
+      <div class="border-t border-slate-200 my-1"></div>
+      <button onclick="resetAll()" class="editor-only w-full flex items-center justify-between px-3 py-2.5 hover:bg-rose-50 rounded-xl text-left text-rose-600">
+        <span class="flex items-center text-sm"><i class="fa-solid fa-rotate-left w-5 mr-2"></i> Сбросить к исходному</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="fixed bottom-5 right-5 z-[200] transform translate-y-20 opacity-0 transition-all bg-slate-900 text-white px-4 py-3 rounded-xl shadow-xl flex items-center space-x-3 text-sm">
+  <i id="toastIcon" class="fa-solid fa-circle-check text-emerald-400"></i>
+  <span id="toastMessage">Готово</span>
+</div>
+
+<div id="kbdHint" class="fixed bottom-5 left-1/2 -translate-x-1/2 z-[150] opacity-0 transition-all bg-white border border-slate-200 shadow-lg px-4 py-2.5 rounded-xl flex gap-4 text-xs text-slate-600">
+  <span><kbd class="px-1.5 py-0.5 bg-slate-100 border border-slate-300 rounded text-[10px]">Ctrl</kbd>+<kbd class="px-1.5 py-0.5 bg-slate-100 border border-slate-300 rounded text-[10px]">K</kbd> поиск</span>
+  <span><kbd class="px-1.5 py-0.5 bg-slate-100 border border-slate-300 rounded text-[10px]">Ctrl</kbd>+<kbd class="px-1.5 py-0.5 bg-slate-100 border border-slate-300 rounded text-[10px]">G</kbd> группа</span>
+  <span><kbd class="px-1.5 py-0.5 bg-slate-100 border border-slate-300 rounded text-[10px]">Ctrl</kbd>+<kbd class="px-1.5 py-0.5 bg-slate-100 border border-slate-300 rounded text-[10px]">D</kbd> тема</span>
+  <span><kbd class="px-1.5 py-0.5 bg-slate-100 border border-slate-300 rounded text-[10px]">Esc</kbd> закрыть</span>
+</div>
+
+<script>
+const EDITOR_PASSWORD = '1405';
+const STORAGE_KEY = 'ecp-checks-v9';
+const THEME_KEY = 'ecp-theme-v9';
+const EDITOR_KEY = 'ecp-editor-v9';
+
+const DEFAULT_DATA = {
+  kirov: { title: 'Кировский филиал', color: 'indigo', groups: [
+    { title: 'Небаланс масс (НБ)', type: 'nebalans', dev: false, rules: [
+      { cond: 'Зимний период: отрицательный НБ ≤ 8%', action: 'Расчёт по средним значениям', note: '8% (зима)' },
+      { cond: 'Летний период: отрицательный НБ ≤ 10%', action: 'Расчёт по средним значениям', note: '10% (лето)' },
+      { cond: 'Летний переходный период: ТУ с примечанием «Автоматика ГВС»', action: 'Принимаем факт без контроля БМ', note: 'Только Кировский филиал', badge: 'only' },
+      { cond: 'Положительный НБ > 8%', action: 'Анализ: близки к расчётным — факт; отклонения — среднее', note: '—' },
+    ]},
+    { title: 'dT меньше 3°C', type: 'dt', dev: false, rules: [
+      { cond: 'Принимаем фактические показания', action: 'Сравнение с предыдущим/аналогичным периодом Q и V', note: '—' },
+      { cond: 'При отрицательном значении dT', action: 'Тщательный анализ', note: '—' },
+    ]},
+    { title: 'dV отрицательная', type: 'dv', dev: true, rules: [
+      { cond: 'В выходные дни на объектах Школа/ДС', action: 'Зануляем dV, Гкал берём факт', note: '—' },
+    ]},
+    { title: 'Досчёты по ВНР', type: 'vnr', dev: false, rules: [
+      { cond: 'Часовые данные t1, t2, M1, M2 присутствуют', action: 'Принять факт', note: '—' },
+      { cond: 'Часовые параметры нулевые/отсутствуют', action: 'Досчёт по среднему', note: '—' },
+      { cond: 'Модели: Магика, КМ-5, ТСРВ, ТЭК, ТВК, DIO, Пульсар, СПТ', action: 'Могут приостанавливать счёт времени', note: 'Единый список моделей' },
+      { cond: 'Модель Пульсар', action: 'ВНР = 24 часа (см. часовые данные)', note: '—' },
+    ]},
+    { title: 'Особенности ПУ', type: 'pu', dev: false, rules: [
+      { cond: 'ТМК-Н при t1(t2) = 0', action: 'Проверка температуры в АИИС (сырые данные): есть — факт; нет — среднее', note: '—' },
+      { cond: 'Магика при недостатке ВНР в МП', action: 'Проверка Twork в АИИС', note: '—' },
+    ]},
+    { title: 'Досчёты за ВНР свыше 24 часов', type: 'vnr24', dev: false, rules: [
+      { cond: 'ВНР 24–25 часов, показания близки к ожидаемым', action: 'Принять факт', note: '—' },
+      { cond: 'Наличие отклонений', action: 'Расчёт по среднему', note: '—' },
+    ]},
+    { title: 'Ручной ввод показаний', type: 'manual', dev: false, rules: [
+      { cond: 'Электронный ящик', action: 'krv-pokazaniya@esplus.ru', note: '—' },
+      { cond: 'Округление', action: 'До трёх знаков после запятой', note: '—' },
+    ]},
+    { title: 'Корректировка текущим периодом', type: 'correct', dev: false, rules: [
+      { cond: 'Показания не предоставлены в прошлом месяце', action: 'Корректировка к фактическому потреблению', note: '—' },
+    ]},
+    { title: 'Отсутствие опроса УУТЭ', type: 'opros', dev: false, rules: [
+      { cond: 'Перечень ТУ без данных', action: 'ЕЦП направляет в ОКУ', note: '—' },
+      { cond: 'Срок опроса (единый)', action: 'На следующий день после даты съёма до 12:00 — принять факт или досчёт', note: 'Изменено', badge: 'new' },
+    ]},
+    { title: 'Забракованные показания', type: 'brak', dev: false, rules: [
+      { cond: 'Перед бесшовной загрузкой в 1С', action: 'Направить перечень в ОКУ филиала', note: 'Изменено', badge: 'new' },
+    ]},
+    { title: 'ЦО в летний период', type: 'co', dev: false, rules: [
+      { cond: 'Создание актов', action: 'Не производим', note: '—' },
+    ]},
+    { title: 'Проверка перед загрузкой', type: 'check', dev: false, rules: [
+      { cond: '1. Проверка периодов', action: '—', note: '—' },
+      { cond: '2. Заполнение Q, V', action: '—', note: '—' },
+      { cond: '3. Хорошие акты «Не допущен»', action: '—', note: '—' },
+      { cond: '4. Плохие акты (причина 5,6) «Допущен»', action: '—', note: '—' },
+      { cond: '5. Проверка всех аномалий', action: '—', note: '—' },
+    ]},
+    { title: 'Норматив на отопление', type: 'norm', dev: false, rules: [
+      { cond: 'Начисление по нормативу', action: 'С сентября', note: '—' },
+    ]},
+    { title: 'Дополнительный выходной', type: 'holiday', dev: false, rules: [
+      { cond: '—', action: '—', note: 'В Кировском филиале нет', check: false },
+    ]},
+  ]},
+  penza: { title: 'Пензенский филиал', color: 'emerald', groups: [
+    { title: 'Небаланс масс (НБ)', type: 'nebalans', dev: true, rules: [
+      { cond: 'Отрицательный НБ ≤ 6%', action: 'Расчёт по средним значениям', note: '6%' },
+      { cond: 'Положительный НБ > 6%', action: 'Анализ: близки к расчётным — факт; отклонения — среднее', note: '6%' },
+      { cond: 'Длительность НБ ≤ 1 суток', action: 'Принять факт при достоверности', note: '—' },
+    ]},
+    { title: 'dT меньше 3°C', type: 'dt', dev: false, rules: [
+      { cond: 'Принимаем фактические показания', action: 'Сравнение с предыдущим/аналогичным периодом Q и V', note: '—' },
+      { cond: 'При отрицательном значении dT', action: 'Тщательный анализ', note: '—' },
+    ]},
+    { title: 'Досчёты по ВНР', type: 'vnr', dev: false, rules: [
+      { cond: 'Часовые данные t1, t2, M1, M2 присутствуют', action: 'Принять факт', note: '—' },
+      { cond: 'Часовые параметры нулевые/отсутствуют', action: 'Досчёт по среднему', note: '—' },
+      { cond: 'Модели: Магика, КМ-5, ТСРВ, ТЭК, ТВК, DIO, Пульсар, СПТ', action: 'Могут приостанавливать счёт времени', note: 'Единый список моделей' },
+      { cond: 'Модель Пульсар', action: 'ВНР = 24 часа (см. часовые данные)', note: '—' },
+    ]},
+    { title: 'Досчёты за период НС (модель СПТ)', type: 'pu', dev: true, rules: [
+      { cond: 'Модель СПТ всегда пишет ВНР = 24 часа, даже при НС', action: 'Внимательный ручной анализ фактических показаний', note: '—' },
+    ]},
+    { title: 'Досчёты за ВНР свыше 24 часов', type: 'vnr24', dev: false, rules: [
+      { cond: 'ВНР 24–25 часов, показания близки к ожидаемым', action: 'Принять факт', note: '—' },
+      { cond: 'Наличие отклонений', action: 'Расчёт по среднему', note: '—' },
+    ]},
+    { title: 'Ручной ввод показаний', type: 'manual', dev: false, rules: [
+      { cond: 'Электронный ящик', action: 'penz-pokazaniya@esplus.ru', note: '—' },
+      { cond: 'Округление', action: 'До трёх знаков после запятой', note: '—' },
+    ]},
+    { title: 'Корректировка текущим периодом', type: 'correct', dev: false, rules: [
+      { cond: 'Показания не предоставлены в прошлом месяце', action: 'Корректировка к фактическому потреблению', note: '—' },
+    ]},
+    { title: 'Наличие актов/писем о допуске', type: 'acts', dev: false, rules: [
+      { cond: 'Перечень ТУ «Не допущен»', action: 'ЕЦП направляет в первый день расчёта', note: '—' },
+      { cond: 'Внесение изменений в статусы УУ', action: 'ОКУ вносит на основании актов', note: '—' },
+    ]},
+    { title: 'Отсутствие опроса УУТЭ', type: 'opros', dev: false, rules: [
+      { cond: 'Перечень ТУ без данных', action: 'ЕЦП направляет в ОКУ', note: '—' },
+      { cond: 'Срок опроса (единый)', action: 'На следующий день после даты съёма до 12:00 — принять факт или досчёт', note: 'Изменено', badge: 'new' },
+    ]},
+    { title: 'Забракованные показания', type: 'brak', dev: false, rules: [
+      { cond: 'Перед бесшовной загрузкой в 1С', action: 'Направить перечень в ОКУ филиала', note: 'Изменено', badge: 'new' },
+    ]},
+    { title: 'ЦО в летний период', type: 'co', dev: false, rules: [
+      { cond: 'Создание актов', action: 'Не производим', note: '—' },
+    ]},
+    { title: 'Проверка перед загрузкой', type: 'check', dev: false, rules: [
+      { cond: '1. Проверка периодов', action: '—', note: '—' },
+      { cond: '2. Заполнение Q, V', action: '—', note: '—' },
+      { cond: '3. Хорошие акты «Не допущен»', action: '—', note: '—' },
+      { cond: '4. Плохие акты (причина 5,6) «Допущен»', action: '—', note: '—' },
+      { cond: '5. Проверка всех аномалий', action: '—', note: '—' },
+    ]},
+    { title: 'Норматив на отопление', type: 'norm', dev: false, rules: [
+      { cond: 'Начисление по нормативу', action: 'С октября', note: '—' },
+    ]},
+    { title: 'Дополнительный выходной', type: 'holiday', dev: false, rules: [
+      { cond: '21 апреля', action: 'Учитывать как нерабочий день при расчёте', note: 'Только Пензенский филиал' },
+    ]},
+  ]},
+  mordovia: { title: 'Мордовский филиал', color: 'violet', groups: [
+    { title: 'Небаланс масс (НБ)', type: 'nebalans', dev: false, rules: [
+      { cond: 'Отрицательный НБ ≤ 6%', action: 'Расчёт по средним значениям', note: '6% (единый)' },
+      { cond: 'Положительный НБ > 6%', action: 'Анализ: близки к расчётным — факт; отклонения — среднее', note: '6% (единый)' },
+      { cond: 'Длительность НБ ≤ 1 суток', action: 'Принять факт при достоверности', note: '—' },
+    ]},
+    { title: 'dT меньше 3°C', type: 'dt', dev: false, rules: [
+      { cond: 'Принимаем фактические показания', action: 'Сравнение с предыдущим/аналогичным периодом Q и V', note: '—' },
+      { cond: 'При отрицательном значении dT', action: 'Тщательный анализ', note: '—' },
+    ]},
+    { title: 'Досчёты по ВНР', type: 'vnr', dev: false, rules: [
+      { cond: 'Часовые данные t1, t2, M1, M2 присутствуют', action: 'Принять факт', note: '—' },
+      { cond: 'Часовые параметры нулевые/отсутствуют', action: 'Досчёт по среднему', note: '—' },
+      { cond: 'Модели: Магика, КМ-5, ТСРВ, ТЭК, ТВК, DIO, Пульсар, СПТ', action: 'Могут приостанавливать счёт времени', note: 'Единый список моделей' },
+      { cond: 'Модель Пульсар', action: 'ВНР = 24 часа (см. часовые данные)', note: '—' },
+    ]},
+    { title: 'Досчёты за период НС (модель СПТ)', type: 'pu', dev: true, rules: [
+      { cond: 'Модель СПТ всегда пишет ВНР = 24 часа, даже при НС', action: 'Внимательный ручной анализ фактических показаний', note: '—' },
+    ]},
+    { title: 'Досчёты за ВНР свыше 24 часов', type: 'vnr24', dev: false, rules: [
+      { cond: 'ВНР 24–25 часов, показания близки к ожидаемым', action: 'Принять факт', note: '—' },
+      { cond: 'Наличие отклонений', action: 'Расчёт по среднему', note: '—' },
+    ]},
+    { title: 'Ручной ввод показаний', type: 'manual', dev: false, rules: [
+      { cond: 'Электронный ящик', action: 'mor-pokazaniya@esplus.ru', note: 'Исправлено' },
+      { cond: 'Округление', action: 'До трёх знаков после запятой', note: '—' },
+    ]},
+    { title: 'Корректировка текущим периодом', type: 'correct', dev: false, rules: [
+      { cond: 'Показания не предоставлены в прошлом месяце', action: 'Корректировка к фактическому потреблению', note: '—' },
+    ]},
+    { title: 'Наличие актов/писем о допуске', type: 'acts', dev: false, rules: [
+      { cond: 'Перечень ТУ «Не допущен»', action: 'ЕЦП направляет в первый день расчёта', note: '—' },
+      { cond: 'Внесение изменений в статусы УУ', action: 'ОКУ вносит на основании актов', note: '—' },
+    ]},
+    { title: 'Отсутствие опроса УУТЭ', type: 'opros', dev: false, rules: [
+      { cond: 'Перечень ТУ без данных', action: 'ЕЦП направляет в ОКУ', note: '—' },
+      { cond: 'Срок опроса (единый)', action: 'На следующий день после даты съёма до 12:00 — принять факт или досчёт', note: 'Изменено', badge: 'new' },
+    ]},
+    { title: 'Забракованные показания', type: 'brak', dev: false, rules: [
+      { cond: 'Перед бесшовной загрузкой в 1С', action: 'Направить перечень в ОКУ филиала', note: 'Изменено', badge: 'new' },
+    ]},
+    { title: 'ЦО в летний период', type: 'co', dev: false, rules: [
+      { cond: 'Создание актов', action: 'Не производим', note: '—' },
+    ]},
+    { title: 'Проверка перед загрузкой', type: 'check', dev: false, rules: [
+      { cond: '1. Проверка периодов', action: '—', note: '—' },
+      { cond: '2. Заполнение Q, V', action: '—', note: '—' },
+      { cond: '3. Хорошие акты «Не допущен»', action: '—', note: '—' },
+      { cond: '4. Плохие акты (причина 5,6) «Допущен»', action: '—', note: '—' },
+      { cond: '5. Проверка всех аномалий', action: '—', note: '—' },
+    ]},
+    { title: 'Норматив на отопление', type: 'norm', dev: false, rules: [
+      { cond: 'Начисление по нормативу', action: 'С октября', note: '—' },
+    ]},
+    { title: 'Дополнительный выходной', type: 'holiday', dev: false, rules: [
+      { cond: '5 августа', action: 'Учитывать как нерабочий день при расчёте', note: 'Только Мордовский филиал' },
+    ]},
+  ]}
+};
+
+const FILIAL_COLORS = {
+  indigo:  { dot: 'bg-indigo-500',  bg: 'bg-indigo-50',  text: 'text-indigo-700' },
+  emerald: { dot: 'bg-emerald-500', bg: 'bg-emerald-50', text: 'text-emerald-700' },
+  violet:  { dot: 'bg-violet-500',  bg: 'bg-violet-50',  text: 'text-violet-700' },
+  amber:   { dot: 'bg-amber-500',   bg: 'bg-amber-50',   text: 'text-amber-700' },
+  rose:    { dot: 'bg-rose-500',    bg: 'bg-rose-50',    text: 'text-rose-700' },
+  sky:     { dot: 'bg-sky-500',     bg: 'bg-sky-50',     text: 'text-sky-700' },
+  teal:    { dot: 'bg-teal-500',    bg: 'bg-teal-50',    text: 'text-teal-700' },
+};
+const COLOR_CYCLE = ['indigo', 'emerald', 'violet', 'amber', 'rose', 'sky', 'teal'];
+
+let state = { data: null, activeTab: 'kirov', isEditor: false, theme: 'light', openGroups: {} };
+
+function deepClone(o) { return JSON.parse(JSON.stringify(o)); }
+function uid() { return Math.random().toString(36).slice(2, 10); }
+
+function loadState() {
+  state.data = deepClone(DEFAULT_DATA);
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+    if (saved) {
+      if (saved.data) state.data = saved.data;
+      if (saved.activeTab && state.data[saved.activeTab]) state.activeTab = saved.activeTab;
+      if (saved.openGroups) state.openGroups = saved.openGroups;
+    }
+  } catch(e){}
+  try {
+    const t = localStorage.getItem(THEME_KEY); if (t) state.theme = t;
+    state.isEditor = localStorage.getItem(EDITOR_KEY) === '1';
+  } catch(e){}
+  ensureIds();
+  if (!state.data[state.activeTab]) { const k = Object.keys(state.data); if (k.length) state.activeTab = k[0]; }
+}
+function ensureIds() {
+  Object.keys(state.data).forEach(f => {
+    if (!state.data[f].color) state.data[f].color = 'indigo';
+    state.data[f].groups.forEach(g => {
+      if (!g.id) g.id = uid();
+      if (typeof g.dev !== 'boolean') g.dev = false;
+      g.rules.forEach(r => { if (!r.id) r.id = uid(); });
+    });
+  });
+}
+function saveState() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ data: state.data, activeTab: state.activeTab, openGroups: state.openGroups })); } catch(e){}
+}
+
+function applyTheme() {
+  const btn = document.getElementById('themeBtn');
+  btn.innerHTML = state.theme === 'dark' ? '<i class="fa-solid fa-sun text-amber-400 text-sm"></i>' : '<i class="fa-solid fa-moon text-slate-600 text-sm"></i>';
+  if (state.theme === 'dark') { document.body.classList.add('bg-slate-900', 'text-slate-100'); document.body.classList.remove('bg-slate-50', 'text-slate-800'); }
+  else { document.body.classList.remove('bg-slate-900', 'text-slate-100'); document.body.classList.add('bg-slate-50', 'text-slate-800'); }
+}
+function toggleTheme() {
+  state.theme = state.theme === 'dark' ? 'light' : 'dark';
+  try { localStorage.setItem(THEME_KEY, state.theme); } catch(e){}
+  applyTheme();
+  toast(state.theme === 'dark' ? '🌙 Тёмная тема' : '☀️ Светлая тема');
+}
+
+function applyEditorUI() {
+  document.body.classList.toggle('viewer', !state.isEditor);
+  const dot = document.getElementById('modeDot'), text = document.getElementById('modeText'), lock = document.getElementById('lockBtn');
+  if (state.isEditor) {
+    dot.className = 'w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block';
+    text.textContent = 'Режим редактора';
+    lock.innerHTML = '<i class="fa-solid fa-unlock mr-1.5"></i> Выйти';
+    lock.className = 'inline-flex items-center px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-medium rounded-xl shadow-sm';
+  } else {
+    dot.className = 'w-1.5 h-1.5 rounded-full bg-slate-400 inline-block';
+    text.textContent = 'Режим просмотра';
+    lock.innerHTML = '<i class="fa-solid fa-lock mr-1.5"></i> Войти';
+    lock.className = 'inline-flex items-center px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-xl shadow-sm';
+  }
+}
+function toggleEditor() {
+  if (state.isEditor) { state.isEditor = false; try { localStorage.removeItem(EDITOR_KEY); } catch(e){} applyEditorUI(); render(); toast('Вы вышли из режима редактора'); return; }
+  document.getElementById('modalPassword').classList.remove('hidden');
+  document.getElementById('modalPassword').classList.add('flex');
+  document.getElementById('passwordField').value = '';
+  document.getElementById('passwordError').classList.add('hidden');
+  setTimeout(() => document.getElementById('passwordField').focus(), 100);
+}
+function closePassword() { document.getElementById('modalPassword').classList.add('hidden'); document.getElementById('modalPassword').classList.remove('flex'); }
+function checkPassword() {
+  const pwd = document.getElementById('passwordField').value;
+  if (pwd === EDITOR_PASSWORD) {
+    state.isEditor = true;
+    try { localStorage.setItem(EDITOR_KEY, '1'); } catch(e){}
+    closePassword(); applyEditorUI(); render(); toast('✓ Режим редактора включён');
+  } else {
+    document.getElementById('passwordError').textContent = 'Неверный пароль';
+    document.getElementById('passwordError').classList.remove('hidden');
+    document.getElementById('passwordField').value = '';
+    document.getElementById('passwordField').focus();
+  }
+}
+
+const VALUE_RE = new RegExp(['\\d+(?:[.,]\\d+)?\\s*%','\\d{1,2}:\\d{2}','\\d+\\s*[–\\-—]\\s*\\d+\\s*(?:час(?:ов|а)?|ч)\\b','\\d+\\s*(?:час(?:ов|а)?|ч)\\b','\\d+\\s*(?:суток|сутки|сут)\\b','\\d+-[хx]\\b','\\d{1,2}\\s+(?:январ|феврал|март|апрел|ма[йя]|июн|июл|август|сентябр|октябр|ноябр|декабр)\\S*'].join('|'), 'gi');
+function escapeHTML(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function escapeAttr(s) { return escapeHTML(s); }
+function renderText(text) { return escapeHTML(text || '').replace(VALUE_RE, m => '<span class="val">' + m + '</span>'); }
+
+function renderStats() {
+  const f = state.data[state.activeTab]; if (!f) return;
+  const totalGroups = f.groups.length;
+  const totalRules = f.groups.reduce((s, g) => s + g.rules.length, 0);
+  const devGroups = f.groups.filter(g => g.dev === true).length;
+  const totalFilials = Object.keys(state.data).length;
+  const colors = FILIAL_COLORS[f.color] || FILIAL_COLORS.indigo;
+  document.getElementById('statsRow').innerHTML = `
+    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center space-x-3">
+      <div class="p-2.5 ${colors.bg} ${colors.text} rounded-xl"><i class="fa-solid fa-layer-group"></i></div>
+      <div class="min-w-0"><p class="text-[10px] font-medium text-slate-500 uppercase tracking-wider">Групп проверок</p><h3 class="text-xl font-bold text-slate-900">${totalGroups}</h3><p class="text-[10px] text-slate-400 truncate">${escapeHTML(f.title)}</p></div>
+    </div>
+    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center space-x-3">
+      <div class="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl"><i class="fa-solid fa-list-check"></i></div>
+      <div class="min-w-0"><p class="text-[10px] font-medium text-slate-500 uppercase tracking-wider">Правил всего</p><h3 class="text-xl font-bold text-emerald-600">${totalRules}</h3><p class="text-[10px] text-slate-400 truncate">во всех группах</p></div>
+    </div>
+    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center space-x-3">
+      <div class="p-2.5 bg-amber-50 text-amber-600 rounded-xl"><i class="fa-solid fa-screwdriver-wrench"></i></div>
+      <div class="min-w-0"><p class="text-[10px] font-medium text-slate-500 uppercase tracking-wider">Заявлено доработок групп</p><h3 class="text-xl font-bold text-amber-600">${devGroups}</h3><p class="text-[10px] text-slate-400 truncate">из ${totalGroups}</p></div>
+    </div>
+    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center space-x-3">
+      <div class="p-2.5 bg-violet-50 text-violet-600 rounded-xl"><i class="fa-solid fa-building"></i></div>
+      <div class="min-w-0"><p class="text-[10px] font-medium text-slate-500 uppercase tracking-wider">Филиалов</p><h3 class="text-xl font-bold text-violet-600">${totalFilials}</h3><p class="text-[10px] text-slate-400 truncate">в реестре</p></div>
+    </div>
+  `;
+}
+
+function renderTabs() {
+  const el = document.getElementById('tabs');
+  const keys = Object.keys(state.data);
+  el.innerHTML = keys.map(key => {
+    const f = state.data[key];
+    const active = key === state.activeTab;
+    const colors = FILIAL_COLORS[f.color] || FILIAL_COLORS.indigo;
+    const count = f.groups.length;
+    const activeCls = active ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900';
+    const closeBtn = (active && state.isEditor && keys.length > 1)
+      ? `<button class="tab-close" onclick="event.stopPropagation(); confirmDeleteFilial('${key}')" title="Удалить филиал">×</button>` : '';
+    return `
+      <div class="tab-wrap inline-flex items-center rounded-lg ${active ? 'bg-white shadow-sm' : ''}">
+        <button onclick="switchTab('${key}')" class="inline-flex items-center px-3 py-1.5 text-xs sm:text-sm font-medium transition-all rounded-lg ${activeCls}">
+          <span class="filial-dot ${colors.dot} mr-2"></span>
+          ${escapeHTML(f.title)}
+          <span class="ml-2 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${active ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-600'}">${count}</span>
+        </button>
+        ${closeBtn}
+      </div>
+    `;
+  }).join('');
+}
+
+function render() {
+  renderTabs(); renderStats();
+  document.getElementById('activeFilialName').textContent = state.data[state.activeTab]?.title || '';
+  const container = document.getElementById('content');
+  const f = state.data[state.activeTab]; if (!f) return;
+  if (!f.groups.length) {
+    container.innerHTML = `<div class="py-16 text-center"><div class="w-16 h-16 bg-indigo-50 text-indigo-500 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl"><i class="fa-solid fa-folder-open"></i></div><h3 class="text-base font-bold text-slate-800">В этом филиале пока нет групп</h3><p class="text-sm text-slate-500 mt-1 mb-4">Добавьте первую группу</p><button onclick="openModalGroup()" class="editor-only inline-flex items-center px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-xl"><i class="fa-solid fa-plus mr-2"></i> Добавить группу</button></div>`;
+    applyFilters(); return;
+  }
+  container.innerHTML = f.groups.map((g, gi) => renderGroup(g, gi)).join('');
+  bindEditable(); applyFilters();
+}
+
+function renderGroup(group, gi) {
+  const gid = group.id;
+  const isOpen = state.openGroups[gid] !== false;
+  const f = state.data[state.activeTab];
+  const colors = FILIAL_COLORS[f.color] || FILIAL_COLORS.indigo;
+  const isDev = group.dev === true;
+  const rulesHTML = group.rules.length === 0
+    ? `<div class="p-6 text-center text-slate-400 text-sm italic">Правил пока нет. Нажмите <b>+</b> чтобы добавить.</div>`
+    : group.rules.map((r, ri) => renderRule(gid, r, ri)).join('');
+  const devBadge = isDev
+    ? '<span class="dev-toggle yes"><i class="fa-solid fa-screwdriver-wrench"></i> Заявлено на доработку: Да</span>'
+    : '<span class="dev-toggle no"><i class="fa-solid fa-circle-check"></i> Заявлено на доработку: Нет</span>';
+  return `
+    <article class="group ${isOpen ? 'open' : ''} bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow" data-group="${gid}" data-dev="${isDev ? 'yes' : 'no'}">
+      <div class="group-header flex items-center gap-3 px-4 py-3 bg-slate-50 cursor-pointer select-none" onclick="toggleGroup('${gid}')">
+        <span class="w-8 h-8 rounded-lg ${colors.bg} ${colors.text} font-bold text-sm flex items-center justify-center flex-shrink-0">${gi + 1}</span>
+        <div class="flex-1 min-w-0 flex items-center gap-2 flex-wrap" onclick="event.stopPropagation()">
+          <input type="text" value="${escapeAttr(group.title)}" ${state.isEditor ? '' : 'readonly'} onchange="renameGroup('${gid}', this.value)" class="flex-1 min-w-[180px] bg-transparent font-semibold text-sm text-slate-800 outline-none px-2 py-1 rounded-lg hover:bg-white focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all">
+          <button onclick="toggleDev('${gid}')" class="${state.isEditor ? '' : 'cursor-default'}" ${state.isEditor ? '' : 'disabled'} style="${state.isEditor ? '' : 'pointer-events:none'}">${devBadge}</button>
+        </div>
+        <span class="px-2 py-0.5 bg-slate-200 text-slate-600 text-[11px] font-bold rounded-full">${group.rules.length}</span>
+        <div class="editor-only flex items-center gap-1" onclick="event.stopPropagation()">
+          <button onclick="addRule('${gid}')" class="w-8 h-8 inline-flex items-center justify-center text-slate-500 hover:text-white hover:bg-indigo-600 rounded-lg transition-all" title="Добавить правило"><i class="fa-solid fa-plus text-xs"></i></button>
+          <button onclick="confirmDeleteGroup('${gid}')" class="w-8 h-8 inline-flex items-center justify-center text-slate-500 hover:text-white hover:bg-rose-600 rounded-lg transition-all" title="Удалить группу"><i class="fa-solid fa-trash text-xs"></i></button>
+        </div>
+        <i class="fa-solid fa-chevron-down text-slate-400 text-xs transition-transform group-chevron"></i>
+      </div>
+      <div class="group-body"><div class="inner">
+        <div class="grid grid-cols-[1.4fr_1.4fr_60px_1fr_44px] gap-x-4 px-4 py-2 bg-slate-100/70 text-[10px] font-bold uppercase tracking-wider text-slate-500 border-t border-slate-200">
+          <div class="pl-2">Условие / Проверка</div><div class="pl-2">Действие</div><div class="text-center">Прим.</div><div class="pl-2">Значение</div><div></div>
+        </div>
+        ${rulesHTML}
+      </div></div>
+    </article>
+  `;
+}
+
+function renderRule(gid, rule, ri) {
+  const check = rule.check === false ? 'off' : 'on';
+  const checkIcon = rule.check === false
+    ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>'
+    : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+  const editableAttr = state.isEditor ? 'contenteditable="true"' : '';
+  const badge = rule.badge === 'new'
+    ? ' <span class="px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[9px] font-bold rounded-full uppercase">изменено</span>'
+    : rule.badge === 'only'
+      ? ' <span class="px-1.5 py-0.5 bg-violet-100 text-violet-700 text-[9px] font-bold rounded-full uppercase">эксклюзив</span>' : '';
+  return `
+    <div class="rule-grid" data-type="${escapeAttr(rule.type || '')}" data-rule-id="${rule.id}">
+      <div class="rule-content editable text-[13px] leading-relaxed text-slate-800 relative" ${editableAttr} data-filial="${state.activeTab}" data-group="${gid}" data-rule="${rule.id}" data-field="cond">${renderText(rule.cond)}</div>
+      <div class="rule-content editable text-[13px] leading-relaxed text-slate-700 relative" ${editableAttr} data-filial="${state.activeTab}" data-group="${gid}" data-rule="${rule.id}" data-field="action">${renderText(rule.action)}</div>
+      <div class="flex justify-center pt-0.5"><button class="check-btn ${check}" onclick="toggleCheck('${gid}', '${rule.id}')" ${state.isEditor ? '' : 'disabled'}>${checkIcon}</button></div>
+      <div class="rule-content editable text-[12px] leading-relaxed text-slate-500 italic relative" ${editableAttr} data-filial="${state.activeTab}" data-group="${gid}" data-rule="${rule.id}" data-field="note">${renderText(rule.note)}${badge}</div>
+      <div class="editor-only flex justify-end pt-0.5"><button onclick="confirmDeleteRule('${gid}', '${rule.id}')" class="w-7 h-7 inline-flex items-center justify-center text-slate-400 hover:text-white hover:bg-rose-600 rounded-lg transition-all"><i class="fa-solid fa-trash text-xs"></i></button></div>
+    </div>
+  `;
+}
+
+function bindEditable() {
+  if (!state.isEditor) return;
+  document.querySelectorAll('.editable[contenteditable="true"]').forEach(cell => {
+    cell.addEventListener('blur', () => {
+      const f = cell.dataset.filial, gid = cell.dataset.group, rid = cell.dataset.rule, field = cell.dataset.field;
+      const value = cell.textContent.replace(/\s+/g, ' ').trim();
+      const rule = findRule(f, gid, rid); if (!rule) return;
+      if ((rule[field] || '') !== value) {
+        rule[field] = value;
+        cell.innerHTML = renderText(value);
+        cell.classList.add('saved');
+        setTimeout(() => cell.classList.remove('saved'), 1400);
+        saveState();
+      }
+    });
+    cell.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); cell.blur(); }
+      if (e.key === 'Escape') { e.preventDefault(); cell.blur(); }
+    });
+    cell.addEventListener('paste', e => {
+      e.preventDefault();
+      const text = (e.clipboardData || window.clipboardData).getData('text');
+      document.execCommand('insertText', false, text);
+    });
+  });
+}
+
+function findGroup(filialKey, gid) { const f = state.data[filialKey]; if (!f) return null; return f.groups.find(g => g.id === gid); }
+function findRule(filialKey, gid, rid) { const g = findGroup(filialKey, gid); if (!g) return null; return g.rules.find(r => r.id === rid); }
+
+function switchTab(key) { state.activeTab = key; render(); saveState(); }
+function toggleGroup(gid) { const el = document.querySelector(`[data-group="${gid}"]`); if (!el) return; const isOpen = el.classList.toggle('open'); state.openGroups[gid] = isOpen; saveState(); }
+function toggleCheck(gid, rid) { if (!state.isEditor) return; const rule = findRule(state.activeTab, gid, rid); if (!rule) return; rule.check = rule.check === false ? true : false; saveState(); render(); }
+function toggleDev(gid) { if (!state.isEditor) return; const g = findGroup(state.activeTab, gid); if (!g) return; g.dev = !g.dev; saveState(); render(); toast(g.dev ? '✓ Группа заявлена на доработку' : 'Группа снята с доработки'); }
+function renameGroup(gid, value) { if (!state.isEditor) return; const g = findGroup(state.activeTab, gid); if (!g) return; const v = value.trim(); if (!v) return; g.title = v; saveState(); }
+function addRule(gid) { if (!state.isEditor) return; const g = findGroup(state.activeTab, gid); if (!g) return; g.rules.push({ id: uid(), cond: 'Новое условие', action: 'Новое действие', note: '—', check: true }); state.openGroups[gid] = true; saveState(); render(); toast('✓ Правило добавлено'); }
+function confirmDeleteRule(gid, rid) {
+  if (!state.isEditor) return;
+  const r = findRule(state.activeTab, gid, rid); if (!r) return;
+  openConfirm('Удалить правило?', `«${(r.cond || '').slice(0, 60)}${r.cond.length > 60 ? '…' : ''}»`, () => {
+    const g = findGroup(state.activeTab, gid);
+    g.rules = g.rules.filter(x => x.id !== rid);
+    saveState(); render(); toast('Правило удалено');
+  });
+}
+function confirmDeleteGroup(gid) {
+  if (!state.isEditor) return;
+  const g = findGroup(state.activeTab, gid); if (!g) return;
+  openConfirm('Удалить группу?', `«${g.title}» и все ${g.rules.length} правил(а)`, () => {
+    const f = state.data[state.activeTab];
+    f.groups = f.groups.filter(x => x.id !== gid);
+    saveState(); render(); toast('Группа удалена');
+  });
+}
+
+function openModalFilial() {
+  if (!state.isEditor) return;
+  document.getElementById('newFilialName').value = '';
+  const sel = document.getElementById('copyFromFilial');
+  sel.innerHTML = '<option value="">— Не копировать (пустой филиал) —</option>';
+  Object.keys(state.data).forEach(key => {
+    const f = state.data[key];
+    const rules = f.groups.reduce((s, g) => s + g.rules.length, 0);
+    const o = document.createElement('option');
+    o.value = key;
+    o.textContent = `${f.title} (${f.groups.length} групп, ${rules} правил)`;
+    sel.appendChild(o);
+  });
+  document.getElementById('copyPreview').classList.add('hidden');
+  document.getElementById('modalFilial').classList.remove('hidden');
+  document.getElementById('modalFilial').classList.add('flex');
+  setTimeout(() => document.getElementById('newFilialName').focus(), 100);
+}
+function closeModalFilial() { document.getElementById('modalFilial').classList.add('hidden'); document.getElementById('modalFilial').classList.remove('flex'); }
+function onCopySourceChange() {
+  const key = document.getElementById('copyFromFilial').value;
+  const prev = document.getElementById('copyPreview');
+  if (!key) { prev.classList.add('hidden'); return; }
+  const f = state.data[key]; if (!f) return;
+  document.getElementById('copyGroupsCount').textContent = f.groups.length;
+  document.getElementById('copyRulesCount').textContent = f.groups.reduce((s, g) => s + g.rules.length, 0);
+  prev.classList.remove('hidden');
+}
+function cloneGroupsFromSource(sourceKey) {
+  const src = state.data[sourceKey]; if (!src) return [];
+  const copy = deepClone(src.groups);
+  copy.forEach(g => { g.id = uid(); g.rules.forEach(r => { r.id = uid(); }); });
+  return copy;
+}
+function createFilial() {
+  const name = document.getElementById('newFilialName').value.trim();
+  if (!name) { document.getElementById('newFilialName').focus(); return; }
+  const sourceKey = document.getElementById('copyFromFilial').value;
+  const key = 'filial_' + uid();
+  let groups = [], color = 'indigo';
+  if (sourceKey) { groups = cloneGroupsFromSource(sourceKey); color = state.data[sourceKey].color || 'indigo'; }
+  else { const usedColors = Object.values(state.data).map(f => f.color); color = COLOR_CYCLE.find(c => !usedColors.includes(c)) || COLOR_CYCLE[Object.keys(state.data).length % COLOR_CYCLE.length]; }
+  state.data[key] = { title: name, color, groups };
+  state.activeTab = key;
+  saveState(); closeModalFilial(); render();
+  toast(`✓ Филиал «${name}» создан${sourceKey ? ' (правила скопированы)' : ''}`);
+}
+function confirmDeleteFilial(key) {
+  if (!state.isEditor) return;
+  const keys = Object.keys(state.data);
+  if (keys.length <= 1) { toast('Нельзя удалить последний филиал', 'error'); return; }
+  const f = state.data[key]; if (!f) return;
+  openConfirm('Удалить филиал?', `«${f.title}» и все его группы (${f.groups.length})`, () => {
+    delete state.data[key];
+    const remaining = Object.keys(state.data);
+    if (state.activeTab === key) state.activeTab = remaining[0];
+    saveState(); render(); toast('Филиал удалён');
+  });
+}
+
+let modalResolve = null;
+function openModalGroup() {
+  if (!state.isEditor) return;
+  openModalInput('Новая группа', 'Название группы', 'Например: Проверка КМ-5', v => {
+    const f = state.data[state.activeTab];
+    f.groups.push({ id: uid(), title: v, type: 'custom', dev: false, rules: [] });
+    saveState(); render(); toast('✓ Группа добавлена');
+  });
+}
+function openModalInput(title, label, placeholder, cb) {
+  document.getElementById('modalTitle').textContent = title;
+  document.getElementById('modalLabel').textContent = label;
+  document.getElementById('modalField').value = '';
+  document.getElementById('modalField').placeholder = placeholder || '';
+  document.getElementById('modalInput').classList.remove('hidden');
+  document.getElementById('modalInput').classList.add('flex');
+  modalResolve = v => { if (v) cb(v); };
+  setTimeout(() => document.getElementById('modalField').focus(), 100);
+}
+function closeModalInput() { document.getElementById('modalInput').classList.add('hidden'); document.getElementById('modalInput').classList.remove('flex'); modalResolve = null; }
+document.getElementById('modalOkBtn').onclick = () => { const v = document.getElementById('modalField').value.trim(); const cb = modalResolve; closeModalInput(); if (cb && v) cb(v); };
+document.getElementById('modalField').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); document.getElementById('modalOkBtn').click(); } if (e.key === 'Escape') closeModalInput(); };
+
+let confirmResolve = null;
+function openConfirm(title, subtitle, cb) {
+  document.getElementById('confirmTitle').textContent = title;
+  document.getElementById('confirmSubtitle').textContent = subtitle;
+  document.getElementById('modalConfirm').classList.remove('hidden');
+  document.getElementById('modalConfirm').classList.add('flex');
+  confirmResolve = cb;
+}
+function closeConfirm() { document.getElementById('modalConfirm').classList.add('hidden'); document.getElementById('modalConfirm').classList.remove('flex'); confirmResolve = null; }
+document.getElementById('confirmOkBtn').onclick = () => { const cb = confirmResolve; closeConfirm(); if (cb) cb(); };
+
+function openExport() { document.getElementById('modalExport').classList.remove('hidden'); document.getElementById('modalExport').classList.add('flex'); }
+function closeExport() { document.getElementById('modalExport').classList.add('hidden'); document.getElementById('modalExport').classList.remove('flex'); }
+function exportCSV(scope) {
+  const keys = scope === 'all' ? Object.keys(state.data) : [state.activeTab];
+  const rows = [['Филиал','Группа','Заявлено на доработку','Условие / Проверка','Действие','Применение','Значение']];
+  keys.forEach(k => {
+    const f = state.data[k];
+    f.groups.forEach(g => { g.rules.forEach(r => { rows.push([f.title, g.title, g.dev ? 'Да' : 'Нет', r.cond || '', r.action || '', r.check === false ? 'нет' : 'да', r.note || '']); }); });
+  });
+  const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(';')).join('\n');
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `ecp-checks-${scope}-${new Date().toISOString().slice(0,10)}.csv`; a.click();
+  URL.revokeObjectURL(url); closeExport(); toast('📄 CSV экспортирован');
+}
+function exportJSON() {
+  const blob = new Blob([JSON.stringify({ data: state.data, exportedAt: new Date().toISOString() }, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `ecp-backup-${new Date().toISOString().slice(0,10)}.json`; a.click();
+  URL.revokeObjectURL(url); closeExport(); toast('🧩 Резервная копия сохранена');
+}
+function importJSON(e) {
+  if (!state.isEditor) return;
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const parsed = JSON.parse(ev.target.result);
+      const incoming = parsed.data || parsed;
+      if (!incoming || typeof incoming !== 'object') throw new Error();
+      closeExport();
+      openConfirm('Импортировать данные?', 'Текущие данные будут заменены', () => {
+        state.data = incoming; ensureIds();
+        state.activeTab = Object.keys(state.data)[0];
+        state.openGroups = {};
+        saveState(); render(); toast('✓ Данные импортированы');
+      });
+    } catch(err) { toast('Ошибка чтения файла', 'error'); }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+function resetAll() {
+  if (!state.isEditor) return;
+  closeExport();
+  openConfirm('Сбросить всё?', 'Все правки будут удалены', () => {
+    state.data = deepClone(DEFAULT_DATA); ensureIds();
+    state.activeTab = 'kirov'; state.openGroups = {};
+    saveState(); render(); toast('✓ Данные сброшены');
+  });
+}
+
+function applyFilters() {
+  const q = (document.getElementById('searchInput').value || '').toLowerCase().trim();
+  const type = document.getElementById('filterType').value;
+  const devFilter = document.getElementById('filterDev').value;
+  document.querySelectorAll('.group').forEach(groupEl => {
+    const groupDev = groupEl.dataset.dev === 'yes';
+    const matchDev = !devFilter || (devFilter === 'yes' && groupDev) || (devFilter === 'no' && !groupDev);
+    let groupVisible = 0;
+    groupEl.querySelectorAll('.rule-grid').forEach(ruleEl => {
+      const rowType = ruleEl.dataset.type || '';
+      const text = ruleEl.textContent.toLowerCase();
+      const matchType = !type || rowType === type;
+      const matchSearch = !q || text.includes(q);
+      if (matchType && matchSearch && matchDev) { ruleEl.classList.remove('hidden'); groupVisible++; }
+      else { ruleEl.classList.add('hidden'); }
+    });
+    groupEl.classList.toggle('hidden', groupVisible === 0);
+  });
+  document.querySelectorAll('.rule-content').forEach(el => {
+    if (el.dataset.marked === '1') { const plain = el.textContent; el.innerHTML = renderText(plain); el.dataset.marked = '0'; }
+  });
+  if (q.length >= 2) {
+    document.querySelectorAll('.rule-content').forEach(el => {
+      const plain = el.textContent;
+      const lower = plain.toLowerCase();
+      const idx = lower.indexOf(q);
+      if (idx === -1) return;
+      const before = plain.slice(0, idx), match = plain.slice(idx, idx + q.length), after = plain.slice(idx + q.length);
+      el.innerHTML = renderText(before) + '<mark>' + escapeHTML(match) + '</mark>' + renderText(after);
+      el.dataset.marked = '1';
+    });
+  }
+}
+
+function toast(msg, type = 'success') {
+  const t = document.getElementById('toast');
+  const i = document.getElementById('toastIcon');
+  document.getElementById('toastMessage').textContent = msg;
+  i.className = type === 'error' ? 'fa-solid fa-circle-exclamation text-rose-400' : 'fa-solid fa-circle-check text-emerald-400';
+  t.classList.remove('translate-y-20', 'opacity-0');
+  setTimeout(() => t.classList.add('translate-y-20', 'opacity-0'), 2400);
+}
+function toggleKbd() {
+  const el = document.getElementById('kbdHint');
+  el.classList.toggle('opacity-0');
+  if (!el.classList.contains('opacity-0')) { setTimeout(() => el.classList.add('opacity-0'), 5000); }
+}
+
+window.addEventListener('scroll', () => {
+  const st = window.scrollY;
+  const h = document.documentElement.scrollHeight - window.innerHeight;
+  document.getElementById('progress').style.width = (h > 0 ? (st / h) * 100 : 0) + '%';
+}, { passive: true });
+
+document.addEventListener('keydown', e => {
+  if (e.ctrlKey && e.key === 'k') { e.preventDefault(); document.getElementById('searchInput').focus(); document.getElementById('searchInput').select(); }
+  if (e.ctrlKey && e.key === 'p') { e.preventDefault(); window.print(); }
+  if (e.ctrlKey && e.key === 'd') { e.preventDefault(); toggleTheme(); }
+  if (e.ctrlKey && e.key === 'g' && state.isEditor) { e.preventDefault(); openModalGroup(); }
+  if (e.ctrlKey && e.shiftKey && (e.key === 'F' || e.key === 'f') && state.isEditor) { e.preventDefault(); openModalFilial(); }
+  if (e.key === 'Escape') { closeModalInput(); closeConfirm(); closePassword(); closeExport(); closeModalFilial(); }
+});
+
+loadState(); applyTheme(); applyEditorUI(); render();
+setTimeout(() => toggleKbd(), 1500);
+</script>
+</body>
+</html>
